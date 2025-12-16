@@ -94,38 +94,31 @@ To upload:
 
 ### 4.3 Add SSL Certificates as Additional Dependencies
 
-In the **Additional Dependencies** field, add:
+In the **Additional Dependencies** field, select:
 - `truststore.jks`
 - `keystore.p12`
 
 These files will be available at `/flink/usrlib/` in the Flink containers. The AIS Guardian code automatically detects certificates at these paths.
 
-### 4.4 Configure Program Arguments
+### 4.4 Configure Program Arguments (Main Args)
 
-In the **Program Arguments** (mainArgs) field, provide your Aiven Kafka bootstrap server:
+In the **Program Arguments** field (sometimes called "Main Args" or "Arguments"), enter:
 
 ```
 --bootstrap-servers kafka-xxx.aivencloud.com:28739
 ```
 
-Or set it via Flink Configuration (see below).
+Replace `kafka-xxx.aivencloud.com:28739` with your actual Aiven Kafka bootstrap server.
 
-### 4.5 Configure Flink Settings
+**All available arguments:**
 
-Add these Flink configuration options:
-
-```yaml
-# Kafka bootstrap servers (alternative to program args)
-env.KAFKA_BOOTSTRAP_SERVERS: kafka-xxx.aivencloud.com:28739
-
-# SSL passwords (if different from default 'changeit')
-env.KAFKA_SSL_TRUSTSTORE_PASSWORD: changeit
-env.KAFKA_SSL_KEYSTORE_PASSWORD: changeit
-
-# Checkpointing (recommended for production)
-execution.checkpointing.interval: 60s
-state.backend: hashmap
-```
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--bootstrap-servers` | localhost:9092 | Aiven Kafka bootstrap servers |
+| `--group-id` | ais-watchdog-flink | Kafka consumer group ID |
+| `--dark-threshold-minutes` | 10 | Minutes before AIS gap triggers alert |
+| `--rendezvous-distance-meters` | 1000 | Distance for ship meeting detection |
+| `--rendezvous-duration-minutes` | 5 | Duration for rendezvous alert |
 
 ## Step 5: Start the Job
 

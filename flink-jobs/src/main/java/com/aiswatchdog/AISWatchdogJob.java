@@ -78,14 +78,23 @@ public class AISWatchdogJob {
             );
 
     public static void main(String[] args) throws Exception {
-        // Get configuration from environment or arguments
-        String kafkaBootstrapServers = getConfig("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092");
-        String kafkaGroupId = getConfig("KAFKA_GROUP_ID", "ais-watchdog-flink");
+        // Parse program arguments (for Ververica Cloud: --bootstrap-servers, --group-id, etc.)
+        org.apache.flink.api.java.utils.ParameterTool params =
+            org.apache.flink.api.java.utils.ParameterTool.fromArgs(args);
 
-        // Detection thresholds (configurable via env vars)
-        long darkThresholdMinutes = Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "10"));
-        double rendezvousDistanceMeters = Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "1000"));
-        long rendezvousDurationMinutes = Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "5"));
+        // Get configuration: program args take priority, then env vars, then defaults
+        String kafkaBootstrapServers = params.get("bootstrap-servers",
+            getConfig("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"));
+        String kafkaGroupId = params.get("group-id",
+            getConfig("KAFKA_GROUP_ID", "ais-watchdog-flink"));
+
+        // Detection thresholds (configurable via args or env vars)
+        long darkThresholdMinutes = params.getLong("dark-threshold-minutes",
+            Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "10")));
+        double rendezvousDistanceMeters = params.getDouble("rendezvous-distance-meters",
+            Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "1000")));
+        long rendezvousDurationMinutes = params.getLong("rendezvous-duration-minutes",
+            Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "5")));
 
         LOG.info("Starting AIS Watchdog Flink Job");
         LOG.info("Kafka Bootstrap Servers: {}", kafkaBootstrapServers);
