@@ -144,6 +144,46 @@ The data flow:
 3. **Local Backend** → reads from both topics, serves to Frontend
 4. **Local Frontend** → displays vessels and alerts
 
+## Managing Services
+
+### Local Services (start.sh)
+
+```bash
+# Start all local services
+./start.sh start
+
+# Stop all local services
+./start.sh stop
+
+# Restart all local services
+./start.sh restart
+
+# Check service status
+./start.sh status
+```
+
+**Note**: When using Ververica Cloud, the local Flink job is not needed. After `./start.sh start`, stop just the local Flink:
+
+```bash
+pkill -f "ais-watchdog-flink"
+```
+
+### Ververica Cloud Job
+
+**Stop the job:**
+1. Go to **Deployments** in Ververica Cloud
+2. Find `ais-guardian` deployment
+3. Click **Suspend** (pauses job, keeps state) or **Cancel** (stops completely)
+
+**Start/Restart the job:**
+1. Go to **Deployments** → `ais-guardian`
+2. Click **Start** or **Resume**
+3. Choose startup options:
+   - **Resume from latest checkpoint** - continues where it left off
+   - **Start fresh** - starts from latest Kafka offset
+
+**Tip**: Use **Suspend/Resume** for temporary stops to preserve state. Use **Cancel/Start** for a fresh start.
+
 ## Monitoring
 
 ### Ververica Dashboard
