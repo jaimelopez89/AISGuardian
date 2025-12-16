@@ -1,0 +1,55 @@
+{
+  "description": "Sample sanctions list for testing. Replace with real OFAC/EU data for production.",
+  "last_updated": "2024-01-01",
+  "entities": [
+    {
+      "id": "SAMPLE-001",
+      "type": "vessel",
+      "name": "SAMPLE VESSEL ONE",
+      "aliases": ["SV ONE", "SAMPLE V1"],
+      "mmsi": "123456789",
+      "imo_number": "1234567",
+      "flag_state": "KP",
+      "source": "OFAC",
+      "date_listed": "2023-01-15",
+      "reason": "North Korean sanctions evasion",
+      "additional_info": {
+        "program": "DPRK",
+        "vessel_type": "Tanker"
+      }
+    },
+    {
+      "id": "SAMPLE-002",
+      "type": "vessel",
+      "name": "TEST TANKER",
+      "aliases": ["TT", "TANKER TEST"],
+      "mmsi": "987654321",
+      "imo_number": "7654321",
+      "flag_state": "IR",
+      "source": "OFAC",
+      "date_listed": "2023-06-20",
+      "reason": "Iranian oil smuggling",
+      "additional_info": {
+        "program": "IRAN",
+        "vessel_type": "Tanker"
+      }
+    },
+    {
+      "id": "SAMPLE-003",
+      "type": "vessel",
+      "name": "DARK RUNNER",
+      "aliases": ["DR", "RUNNER"],
+      "mmsi": "555555555",
+      "imo_number": "5555555",
+      "flag_state": "RU",
+      "source": "EU",
+      "date_listed": "2024-03-01",
+      "reason": "Russian sanctions evasion - shadow fleet",
+      "additional_info": {
+        "program": "RUSSIA",
+        "vessel_type": "Tanker",
+        "notes": "Part of shadow fleet for Russian oil exports"
+      }
+    }
+  ]
+}

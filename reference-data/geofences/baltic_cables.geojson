@@ -1,0 +1,181 @@
+{
+  "type": "FeatureCollection",
+  "description": "Baltic Sea undersea cables and pipelines - critical infrastructure protection zones",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-CLION1",
+        "name": "C-Lion1 Data Cable (Helsinki-Rostock)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "telecommunications",
+        "owner": "Cinia Oy",
+        "severity": "CRITICAL",
+        "buffer_nm": 5,
+        "description": "Submarine fiber optic cable connecting Finland to Germany"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [24.8, 59.9],
+            [24.5, 59.4],
+            [23.5, 58.8],
+            [21.0, 57.5],
+            [19.5, 56.5],
+            [18.0, 55.5],
+            [15.0, 54.5],
+            [12.2, 54.2],
+            [12.0, 54.3],
+            [15.0, 54.7],
+            [18.0, 55.7],
+            [19.5, 56.7],
+            [21.0, 57.7],
+            [23.5, 59.0],
+            [24.5, 59.6],
+            [25.0, 60.1],
+            [24.8, 59.9]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-BALTICCONNECTOR",
+        "name": "Balticconnector Gas Pipeline (Finland-Estonia)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "gas_pipeline",
+        "owner": "Baltic Connector Oy / Elering",
+        "severity": "CRITICAL",
+        "buffer_nm": 5,
+        "description": "Natural gas pipeline connecting Finland and Estonia - damaged Oct 2023"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [24.2, 59.9],
+            [24.0, 59.7],
+            [23.8, 59.5],
+            [24.0, 59.45],
+            [24.2, 59.5],
+            [24.4, 59.7],
+            [24.4, 59.9],
+            [24.2, 59.9]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-ESTLINK1",
+        "name": "Estlink 1 Power Cable (Finland-Estonia)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "power",
+        "owner": "Fingrid/Elering",
+        "severity": "HIGH",
+        "buffer_nm": 5,
+        "description": "HVDC power cable connecting Finnish and Estonian grids"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [25.0, 59.8],
+            [24.8, 59.6],
+            [25.0, 59.45],
+            [25.2, 59.5],
+            [25.2, 59.7],
+            [25.0, 59.8]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-ESTLINK2",
+        "name": "Estlink 2 Power Cable (Finland-Estonia)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "power",
+        "owner": "Fingrid/Elering",
+        "severity": "HIGH",
+        "buffer_nm": 5,
+        "description": "Second HVDC power cable connecting Finnish and Estonian grids"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [25.3, 59.85],
+            [25.1, 59.65],
+            [25.3, 59.5],
+            [25.5, 59.55],
+            [25.5, 59.75],
+            [25.3, 59.85]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-SWEDENPOL",
+        "name": "SwePol HVDC Link (Sweden-Poland)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "power",
+        "owner": "Svenska Kraftnat/PSE",
+        "severity": "HIGH",
+        "buffer_nm": 5,
+        "description": "HVDC power cable connecting Sweden and Poland"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [14.0, 55.4],
+            [14.5, 55.2],
+            [15.5, 54.8],
+            [16.0, 54.6],
+            [16.2, 54.7],
+            [15.5, 55.0],
+            [14.5, 55.4],
+            [14.0, 55.6],
+            [14.0, 55.4]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-NORDBALT",
+        "name": "NordBalt Power Cable (Sweden-Lithuania)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "power",
+        "owner": "Svenska Kraftnat/Litgrid",
+        "severity": "HIGH",
+        "buffer_nm": 5,
+        "description": "HVDC power cable connecting Sweden and Lithuania"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [17.5, 56.2],
+            [18.5, 55.8],
+            [19.5, 55.6],
+            [20.5, 55.7],
+            [20.5, 55.9],
+            [19.5, 55.8],
+            [18.5, 56.0],
+            [17.5, 56.4],
+            [17.5, 56.2]
+          ]
+        ]
+      }
+    }
+  ]
+}

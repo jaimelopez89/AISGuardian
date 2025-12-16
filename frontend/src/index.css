@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c4a6e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0369a1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0284c7;
+}
+
+/* Map container */
+.mapboxgl-map {
+  font-family: inherit;
+}
+
+/* Alert severity badges */
+.severity-low { @apply bg-alert-low/20 text-alert-low border-alert-low; }
+.severity-medium { @apply bg-alert-medium/20 text-alert-medium border-alert-medium; }
+.severity-high { @apply bg-alert-high/20 text-alert-high border-alert-high; }
+.severity-critical { @apply bg-alert-critical/20 text-alert-critical border-alert-critical animate-pulse; }
+
+/* Vessel type colors */
+.vessel-tanker { color: #f97316; }
+.vessel-cargo { color: #8b5cf6; }
+.vessel-fishing { color: #22c55e; }
+.vessel-passenger { color: #3b82f6; }
+.vessel-other { color: #6b7280; }
+
+/* Glass effect panels */
+.glass-panel {
+  @apply bg-maritime-900/80 backdrop-blur-md border border-maritime-700/50 rounded-lg shadow-xl;
+}
+
+/* Pulsing dot for live indicators */
+@keyframes ping-slow {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Monospace font for data displays */
+.font-mono {
+  font-family: 'JetBrains Mono', Monaco, 'Courier New', monospace;
+}
+
+/* Infrastructure zone pulse animation */
+@keyframes zone-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-zone-pulse {
+  animation: zone-pulse 3s ease-in-out infinite;
+}
+
+/* Flagged vessel highlight */
+.vessel-flagged {
+  @apply ring-2 ring-red-500/50 ring-offset-2 ring-offset-transparent;
+}

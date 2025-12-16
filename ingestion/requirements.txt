@@ -1,0 +1,34 @@
+# AIS Watchdog - Ingestion Dependencies
+# Install: pip install -r requirements.txt
+
+# Kafka client
+confluent-kafka>=2.3.0
+
+# WebSocket client for AISStream
+websockets>=12.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# HTTP client for reference data downloads
+httpx>=0.25.0
+
+# GeoJSON handling
+geojson>=3.1.0
+
+# For geo calculations (point-in-polygon, distance)
+shapely>=2.0.0
+
+# Data validation
+pydantic>=2.5.0
+
+# Async utilities
+aiofiles>=23.2.0
+
+# CLI progress bars
+tqdm>=4.66.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0

@@ -1,0 +1,152 @@
+{
+  "description": "Major Mediterranean ports for in-port detection",
+  "last_updated": "2024-01-01",
+  "ports": [
+    {
+      "id": "ESALG",
+      "name": "Algeciras",
+      "country": "Spain",
+      "latitude": 36.1267,
+      "longitude": -5.4433,
+      "type": "major",
+      "locode": "ESALG"
+    },
+    {
+      "id": "ESVLC",
+      "name": "Valencia",
+      "country": "Spain",
+      "latitude": 39.4536,
+      "longitude": -0.3227,
+      "type": "major",
+      "locode": "ESVLC"
+    },
+    {
+      "id": "FRFOS",
+      "name": "Fos-sur-Mer",
+      "country": "France",
+      "latitude": 43.4056,
+      "longitude": 4.9442,
+      "type": "major",
+      "locode": "FRFOS"
+    },
+    {
+      "id": "FRMRS",
+      "name": "Marseille",
+      "country": "France",
+      "latitude": 43.3100,
+      "longitude": 5.3669,
+      "type": "major",
+      "locode": "FRMRS"
+    },
+    {
+      "id": "ITGOA",
+      "name": "Genoa",
+      "country": "Italy",
+      "latitude": 44.4072,
+      "longitude": 8.9342,
+      "type": "major",
+      "locode": "ITGOA"
+    },
+    {
+      "id": "ITGIT",
+      "name": "Gioia Tauro",
+      "country": "Italy",
+      "latitude": 38.4264,
+      "longitude": 15.8972,
+      "type": "major",
+      "locode": "ITGIT"
+    },
+    {
+      "id": "GRPIR",
+      "name": "Piraeus",
+      "country": "Greece",
+      "latitude": 37.9422,
+      "longitude": 23.6469,
+      "type": "major",
+      "locode": "GRPIR"
+    },
+    {
+      "id": "TNTUN",
+      "name": "Tunis",
+      "country": "Tunisia",
+      "latitude": 36.8028,
+      "longitude": 10.1797,
+      "type": "major",
+      "locode": "TNTUN"
+    },
+    {
+      "id": "EGALY",
+      "name": "Alexandria",
+      "country": "Egypt",
+      "latitude": 31.2001,
+      "longitude": 29.9187,
+      "type": "major",
+      "locode": "EGALY"
+    },
+    {
+      "id": "EGPSD",
+      "name": "Port Said",
+      "country": "Egypt",
+      "latitude": 31.2653,
+      "longitude": 32.3019,
+      "type": "major",
+      "locode": "EGPSD"
+    },
+    {
+      "id": "ILHFA",
+      "name": "Haifa",
+      "country": "Israel",
+      "latitude": 32.8192,
+      "longitude": 34.9983,
+      "type": "major",
+      "locode": "ILHFA"
+    },
+    {
+      "id": "TRIZM",
+      "name": "Izmir",
+      "country": "Turkey",
+      "latitude": 38.4361,
+      "longitude": 27.1428,
+      "type": "major",
+      "locode": "TRIZM"
+    },
+    {
+      "id": "TRIST",
+      "name": "Istanbul",
+      "country": "Turkey",
+      "latitude": 41.0053,
+      "longitude": 28.9770,
+      "type": "major",
+      "locode": "TRIST"
+    },
+    {
+      "id": "MTMAR",
+      "name": "Marsaxlokk",
+      "country": "Malta",
+      "latitude": 35.8417,
+      "longitude": 14.5433,
+      "type": "major",
+      "locode": "MTMAR"
+    },
+    {
+      "id": "LYBDA",
+      "name": "Benghazi",
+      "country": "Libya",
+      "latitude": 32.1167,
+      "longitude": 20.0667,
+      "type": "major",
+      "locode": "LYBDA",
+      "notes": "Sanctioned port - monitor all traffic"
+    },
+    {
+      "id": "SYPOR",
+      "name": "Tartus",
+      "country": "Syria",
+      "latitude": 34.8833,
+      "longitude": 35.8833,
+      "type": "major",
+      "locode": "SYTTS",
+      "notes": "Sanctioned port - monitor all traffic"
+    }
+  ]
+}
