@@ -52,6 +52,10 @@ public class CableProximityDetector
     // Cache for parsed geometries
     private final Map<String, Geometry> geometryCache = new HashMap<>();
 
+    // Rate limiting: track last alert time per vessel+zone (MMSI:ZoneId -> timestamp)
+    private final Map<String, Long> lastAlertTime = new HashMap<>();
+    private static final long ALERT_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+
     @Override
     public void processElement(
             AISPosition position,
@@ -85,10 +89,21 @@ public class CableProximityDetector
                 );
 
                 if (isInZone) {
+                    // Rate limiting: check if we've alerted for this vessel+zone recently
+                    String alertKey = position.getMmsi() + ":" + zone.getZoneId();
+                    long now = System.currentTimeMillis();
+                    Long lastAlert = lastAlertTime.get(alertKey);
+
+                    if (lastAlert != null && (now - lastAlert) < ALERT_COOLDOWN_MS) {
+                        // Skip - already alerted recently for this vessel in this zone
+                        continue;
+                    }
+
                     // Determine threat level based on behavior
                     Alert alert = assessThreat(position, zone);
                     if (alert != null) {
                         out.collect(alert);
+                        lastAlertTime.put(alertKey, now);
                         LOG.info("Cable proximity alert: {} near {} - {}",
                                 position.getShipName() != null ? position.getShipName() : position.getMmsi(),
                                 zone.getZoneName(),

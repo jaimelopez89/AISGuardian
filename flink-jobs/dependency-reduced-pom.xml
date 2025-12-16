@@ -138,13 +138,13 @@
     </dependency>
   </dependencies>
   <properties>
-    <java.version>11</java.version>
-    <maven.compiler.source>${java.version}</maven.compiler.source>
-    <jackson.version>2.15.3</jackson.version>
-    <flink.version>1.18.1</flink.version>
     <jts.version>1.19.0</jts.version>
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <slf4j.version>2.0.9</slf4j.version>
+    <java.version>11</java.version>
+    <maven.compiler.source>${java.version}</maven.compiler.source>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jackson.version>2.15.3</jackson.version>
+    <flink.version>1.18.1</flink.version>
   </properties>
 </project>

@@ -4,6 +4,7 @@ import com.aiswatchdog.detectors.CableProximityDetector;
 import com.aiswatchdog.detectors.DarkEventDetector;
 import com.aiswatchdog.detectors.FishingPatternDetector;
 import com.aiswatchdog.detectors.GeofenceViolationDetector;
+import com.aiswatchdog.detectors.LoiteringDetector;
 import com.aiswatchdog.detectors.RendezvousDetector;
 import com.aiswatchdog.models.AISPosition;
 import com.aiswatchdog.models.Alert;
@@ -82,9 +83,9 @@ public class AISWatchdogJob {
         String kafkaGroupId = getConfig("KAFKA_GROUP_ID", "ais-watchdog-flink");
 
         // Detection thresholds (configurable via env vars)
-        long darkThresholdMinutes = Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "120"));
-        double rendezvousDistanceMeters = Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "500"));
-        long rendezvousDurationMinutes = Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "30"));
+        long darkThresholdMinutes = Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "10"));
+        double rendezvousDistanceMeters = Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "1000"));
+        long rendezvousDurationMinutes = Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "5"));
 
         LOG.info("Starting AIS Watchdog Flink Job");
         LOG.info("Kafka Bootstrap Servers: {}", kafkaBootstrapServers);
@@ -205,12 +206,20 @@ public class AISWatchdogJob {
                 .process(new CableProximityDetector())
                 .name("Cable Proximity Detector");
 
+        // ========== DETECTOR 6: Loitering Detection ==========
+        // Detects vessels staying in a small area for extended periods
+        // Can indicate surveillance, illegal fishing, or preparation for ship-to-ship transfer
+        SingleOutputStreamOperator<Alert> loiteringAlerts = keyedPositions
+                .process(new LoiteringDetector(0.5, 10, 60, 60000))
+                .name("Loitering Detector");
+
         // ========== UNION ALL ALERTS ==========
         DataStream<Alert> allAlerts = geofenceAlerts
                 .union(darkAlerts)
                 .union(rendezvousAlerts)
                 .union(fishingAlerts)
-                .union(cableAlerts);
+                .union(cableAlerts)
+                .union(loiteringAlerts);
 
         // ========== SINK: Alerts to Kafka ==========
         KafkaSink<String> alertsSink = KafkaSink.<String>builder()

@@ -38,7 +38,7 @@ app.add_middleware(
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
 alerts_list: list = []
-MAX_ALERTS = 100
+MAX_ALERTS = 500
 
 # Kafka consumer configuration
 def get_kafka_config(group_id: str) -> dict:
@@ -146,11 +146,12 @@ async def get_vessels(
 
 
 @app.get("/api/alerts")
-async def get_alerts(limit: int = Query(50, le=100)):
+async def get_alerts(limit: int = Query(100, le=500)):
     """Get recent alerts."""
     return {
         "alerts": alerts_list[:limit],
         "count": len(alerts_list[:limit]),
+        "total": len(alerts_list),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 

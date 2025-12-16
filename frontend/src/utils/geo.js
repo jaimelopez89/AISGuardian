@@ -440,6 +440,56 @@ export const BALTIC_CABLE_GEOFENCES = [
       [17.5, 56.2], [18.5, 55.8], [19.5, 55.6], [20.5, 55.7],
       [20.5, 55.9], [19.5, 55.8], [18.5, 56.0], [17.5, 56.4], [17.5, 56.2]
     ]
+  },
+  {
+    id: 'PIPELINE-NORDSTREAM',
+    name: 'Nord Stream 1 & 2',
+    subtitle: 'Gas Pipelines RU → DE (SABOTAGED)',
+    type: 'gas_pipeline',
+    severity: 'CRITICAL',
+    color: [220, 38, 38], // Darker Red - sabotaged
+    coordinates: [
+      [28.0, 59.6], [26.0, 59.0], [23.0, 58.5], [20.0, 57.5],
+      [18.0, 56.2], [16.0, 55.2], [14.0, 54.4], [13.5, 54.1],
+      [13.7, 53.9], [14.2, 54.2], [16.2, 55.0], [18.2, 56.0],
+      [20.2, 57.3], [23.2, 58.3], [26.2, 58.8], [28.2, 59.4], [28.0, 59.6]
+    ]
+  },
+  {
+    id: 'CABLE-FENNOSKAN1',
+    name: 'Fenno-Skan 1',
+    subtitle: 'HVDC Power FI → SE',
+    type: 'power',
+    severity: 'HIGH',
+    color: [14, 165, 233], // Sky blue
+    coordinates: [
+      [21.6, 61.2], [21.0, 60.8], [19.5, 60.3], [18.3, 60.3],
+      [18.1, 60.5], [19.5, 60.5], [21.0, 61.0], [21.8, 61.3], [21.6, 61.2]
+    ]
+  },
+  {
+    id: 'CABLE-FENNOSKAN2',
+    name: 'Fenno-Skan 2',
+    subtitle: 'HVDC Power FI → SE',
+    type: 'power',
+    severity: 'HIGH',
+    color: [56, 189, 248], // Lighter sky blue
+    coordinates: [
+      [21.4, 61.0], [20.8, 60.6], [19.3, 60.1], [18.1, 60.1],
+      [17.9, 60.3], [19.3, 60.3], [20.8, 60.8], [21.6, 61.1], [21.4, 61.0]
+    ]
+  },
+  {
+    id: 'PIPELINE-BALTICPIPE',
+    name: 'Baltic Pipe',
+    subtitle: 'Gas Pipeline DK → PL',
+    type: 'gas_pipeline',
+    severity: 'CRITICAL',
+    color: [249, 115, 22], // Orange
+    coordinates: [
+      [12.0, 55.3], [12.5, 55.0], [13.5, 54.5], [14.5, 54.2], [15.0, 54.1],
+      [15.2, 54.2], [14.5, 54.4], [13.5, 54.7], [12.5, 55.2], [12.0, 55.5], [12.0, 55.3]
+    ]
   }
 ]
 

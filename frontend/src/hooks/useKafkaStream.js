@@ -18,7 +18,9 @@ export function useVesselPositions(options = {}) {
   const [error, setError] = useState(null)
   const [stats, setStats] = useState({ messagesPerSecond: 0, totalMessages: 0 })
 
-  const lastCountRef = useRef(0)
+  // Track message rate over time
+  const messageCountsRef = useRef([])
+  const lastVesselDataRef = useRef(new Map())
 
   const fetchVessels = useCallback(async () => {
     try {
@@ -31,6 +33,20 @@ export function useVesselPositions(options = {}) {
       const data = await response.json()
       const vesselList = data.vessels || []
 
+      // Count how many vessels have updated positions since last fetch
+      let updatedCount = 0
+      const newDataMap = new Map()
+      vesselList.forEach(v => {
+        const key = `${v.mmsi}-${v.latitude}-${v.longitude}`
+        newDataMap.set(v.mmsi, key)
+
+        const lastKey = lastVesselDataRef.current.get(v.mmsi)
+        if (lastKey !== key) {
+          updatedCount++
+        }
+      })
+      lastVesselDataRef.current = newDataMap
+
       // Update vessel map and list
       const newMap = new Map()
       vesselList.forEach(v => {
@@ -42,15 +58,19 @@ export function useVesselPositions(options = {}) {
       setIsConnected(true)
       setError(null)
 
-      // Update stats
-      const newCount = vesselList.length
-      if (newCount !== lastCountRef.current) {
-        setStats(prev => ({
-          messagesPerSecond: Math.abs(newCount - lastCountRef.current),
-          totalMessages: prev.totalMessages + Math.abs(newCount - lastCountRef.current),
-        }))
-        lastCountRef.current = newCount
-      }
+      // Track message rate (rolling window of last 5 seconds)
+      const now = Date.now()
+      messageCountsRef.current.push({ time: now, count: updatedCount })
+      messageCountsRef.current = messageCountsRef.current.filter(m => now - m.time < 5000)
+
+      const totalInWindow = messageCountsRef.current.reduce((sum, m) => sum + m.count, 0)
+      const windowSeconds = Math.max(1, (now - (messageCountsRef.current[0]?.time || now)) / 1000)
+      const msgPerSec = Math.round(totalInWindow / windowSeconds)
+
+      setStats(prev => ({
+        messagesPerSecond: msgPerSec,
+        totalMessages: prev.totalMessages + updatedCount,
+      }))
 
     } catch (err) {
       setError(err.message)
@@ -135,7 +155,7 @@ export function useAlerts(options = {}) {
     alertsBySeverity,
     isConnected,
     error,
-    stats: { totalMessages: alerts.length },
+    stats: { messagesPerSecond: 0, totalMessages: alerts.length },
   }
 }
 

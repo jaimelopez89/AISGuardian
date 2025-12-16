@@ -1,5 +1,5 @@
 import React from 'react'
-import { Ship, Radio, AlertTriangle, Activity } from 'lucide-react'
+import { Shield, Radio, AlertTriangle, Activity, Ship } from 'lucide-react'
 
 /**
  * Application header with live stats.
@@ -10,12 +10,12 @@ export default function Header({ vesselCount, alertCount, isConnected, messagesP
       <div className="flex items-center justify-between">
         {/* Logo & Title */}
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-maritime-800 rounded-lg">
-            <Ship className="w-6 h-6 text-maritime-300" />
+          <div className="p-2 bg-blue-600 rounded-lg">
+            <Shield className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">AIS Watchdog</h1>
-            <p className="text-xs text-maritime-400">Real-time Maritime Anomaly Detection</p>
+            <h1 className="text-xl font-bold text-white">AIS Guardian</h1>
+            <p className="text-xs text-maritime-400">Baltic Sea Infrastructure Protection</p>
           </div>
         </div>
 
@@ -59,11 +59,15 @@ export default function Header({ vesselCount, alertCount, isConnected, messagesP
 }
 
 function StatBadge({ icon: Icon, label, value, color }) {
+  const displayValue = typeof value === 'number' && !isNaN(value)
+    ? value.toLocaleString()
+    : '0'
+
   return (
     <div className="flex items-center gap-2">
       <Icon className={`w-4 h-4 ${color}`} />
       <div>
-        <div className="text-lg font-bold text-white">{value.toLocaleString()}</div>
+        <div className="text-lg font-bold text-white">{displayValue}</div>
         <div className="text-xs text-maritime-400">{label}</div>
       </div>
     </div>
