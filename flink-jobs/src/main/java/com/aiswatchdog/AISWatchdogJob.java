@@ -274,6 +274,10 @@ public class AISWatchdogJob {
     /**
      * Build Kafka properties with SSL support for Aiven.
      * Uses Java KeyStores (JKS/PKCS12) converted from PEM certificates.
+     *
+     * Supports two modes:
+     * 1. Local/env-based: Set KAFKA_SSL_TRUSTSTORE_LOCATION and KAFKA_SSL_KEYSTORE_LOCATION env vars
+     * 2. Ververica Cloud: Certificates uploaded as Additional Dependencies are at /flink/usrlib/
      */
     private static Properties buildKafkaProperties(String bootstrapServers) {
         Properties props = new Properties();
@@ -283,6 +287,22 @@ public class AISWatchdogJob {
         String truststorePassword = System.getenv("KAFKA_SSL_TRUSTSTORE_PASSWORD");
         String keystoreLocation = System.getenv("KAFKA_SSL_KEYSTORE_LOCATION");
         String keystorePassword = System.getenv("KAFKA_SSL_KEYSTORE_PASSWORD");
+
+        // Ververica Cloud: certificates uploaded as Additional Dependencies go to /flink/usrlib/
+        if (truststoreLocation == null) {
+            java.io.File ververicaTruststore = new java.io.File("/flink/usrlib/truststore.jks");
+            if (ververicaTruststore.exists()) {
+                truststoreLocation = ververicaTruststore.getAbsolutePath();
+                LOG.info("Found Ververica truststore at: {}", truststoreLocation);
+            }
+        }
+        if (keystoreLocation == null) {
+            java.io.File ververicaKeystore = new java.io.File("/flink/usrlib/keystore.p12");
+            if (ververicaKeystore.exists()) {
+                keystoreLocation = ververicaKeystore.getAbsolutePath();
+                LOG.info("Found Ververica keystore at: {}", keystoreLocation);
+            }
+        }
 
         if (truststoreLocation != null && keystoreLocation != null) {
             LOG.info("Configuring SSL for Kafka connection (Aiven)");

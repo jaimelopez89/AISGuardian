@@ -1,6 +1,6 @@
 # Deploying AIS Guardian on Ververica Cloud
 
-This guide explains how to deploy the AIS Guardian Flink job on Ververica Cloud with Aiven Kafka.
+This guide explains how to deploy the AIS Guardian Flink job on [Ververica Cloud](https://www.ververica.com/deployment/managed-service) with Aiven Kafka.
 
 ## Architecture
 
@@ -9,19 +9,19 @@ This guide explains how to deploy the AIS Guardian Flink job on Ververica Cloud 
 │  AIS Ingestion  │────▶│   Aiven Kafka    │────▶│ Ververica Cloud │
 │   (Python)      │     │   (Managed)      │     │  (Flink 1.18)   │
 └─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                │                         │
-                                │ alerts topic            │
-                                ▼                         │
-                        ┌──────────────────┐              │
-                        │  Backend API     │◀─────────────┘
-                        │  (FastAPI)       │
-                        └────────┬─────────┘
-                                 │
-                                 ▼
-                        ┌──────────────────┐
-                        │    Frontend      │
-                        │    (React)       │
-                        └──────────────────┘
+                               │                         │
+                               │ alerts topic            │
+                               ▼                         │
+                       ┌──────────────────┐              │
+                       │  Backend API     │◀─────────────┘
+                       │  (FastAPI)       │
+                       └────────┬─────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │    Frontend      │
+                       │    (React)       │
+                       └──────────────────┘
 ```
 
 ## Prerequisites
@@ -43,7 +43,7 @@ This creates: `target/ais-guardian-ververica.jar` (~15MB instead of ~80MB)
 
 ## Step 2: Prepare SSL Certificates
 
-If you haven't already, convert Aiven's PEM certificates to Java KeyStores:
+Convert Aiven's PEM certificates to Java KeyStores:
 
 ```bash
 # From the project root
@@ -56,147 +56,170 @@ This creates:
 
 ## Step 3: Set Up Ververica Cloud
 
-### 3.1 Create a Namespace
+### 3.1 Create a Workspace
 
 1. Log into [Ververica Cloud Console](https://cloud.ververica.com/)
-2. Create a new namespace (e.g., `ais-guardian`)
+2. Create a new workspace (e.g., `ais-guardian`)
 
-### 3.2 Create Secrets
+### 3.2 Upload Artifacts
 
-Create two secrets in your namespace:
+Upload three files to the **Artifacts** section:
 
-**Secret 1: `aiven-kafka-credentials`** (Key-Value type)
+1. **ais-guardian-ververica.jar** - Your Flink application
+2. **truststore.jks** - Aiven CA certificate (from setup-ssl.sh)
+3. **keystore.p12** - Client certificate and key (from setup-ssl.sh)
 
-| Key | Value |
-|-----|-------|
-| `bootstrap-servers` | `kafka-xxx.aivencloud.com:28739` |
-| `truststore-password` | `changeit` |
-| `keystore-password` | `changeit` |
-
-**Secret 2: `aiven-kafka-ssl-certs`** (Files type)
-
-Upload these files:
-- `truststore.jks`
-- `keystore.p12`
-
-### 3.3 Upload the JAR
-
-1. Go to **Artifacts** in your namespace
+To upload:
+1. Go to **Artifacts** in your workspace
 2. Click **Upload Artifact**
-3. Upload `ais-guardian-ververica.jar`
-4. Name it `ais-guardian-ververica.jar` with version `1`
+3. Select each file and upload
+
+> **Note**: Artifacts have a 50MB limit. The Ververica JAR is ~15MB which is well under this limit.
 
 ## Step 4: Create the Deployment
 
-### Option A: Using the UI
+### 4.1 Create New Deployment
 
 1. Go to **Deployments** → **Create Deployment**
-2. Configure:
-   - **Name**: `ais-guardian`
-   - **Artifact**: Select your uploaded JAR
-   - **Entry Class**: `com.aiswatchdog.AISWatchdogJob`
-   - **Parallelism**: `2`
-   - **Flink Version**: `1.18`
+2. Select **JAR** as the deployment type
 
-3. Add environment variables:
-   ```
-   KAFKA_BOOTSTRAP_SERVERS = ${secret:aiven-kafka-credentials:bootstrap-servers}
-   KAFKA_SSL_TRUSTSTORE_LOCATION = /opt/flink/secrets/truststore.jks
-   KAFKA_SSL_TRUSTSTORE_PASSWORD = ${secret:aiven-kafka-credentials:truststore-password}
-   KAFKA_SSL_KEYSTORE_LOCATION = /opt/flink/secrets/keystore.p12
-   KAFKA_SSL_KEYSTORE_PASSWORD = ${secret:aiven-kafka-credentials:keystore-password}
-   ```
+### 4.2 Configure the Deployment
 
-4. Mount the SSL certificate secret:
-   - Volume: `aiven-kafka-ssl-certs`
-   - Mount path: `/opt/flink/secrets`
+| Setting | Value |
+|---------|-------|
+| **Name** | `ais-guardian` |
+| **JAR URI** | Select `ais-guardian-ververica.jar` from artifacts |
+| **Entry Class** | `com.aiswatchdog.AISWatchdogJob` |
+| **Parallelism** | `2` |
 
-5. Configure Flink settings:
-   ```
-   execution.checkpointing.interval: 60s
-   state.backend: rocksdb
-   ```
+### 4.3 Add SSL Certificates as Additional Dependencies
 
-### Option B: Using the API/CLI
+In the **Additional Dependencies** field, add:
+- `truststore.jks`
+- `keystore.p12`
 
-Apply the deployment configuration:
+These files will be available at `/flink/usrlib/` in the Flink containers. The AIS Guardian code automatically detects certificates at these paths.
 
-```bash
-# Edit ververica/deployment.yaml with your namespace and settings
-vvp deployment create -f ververica/deployment.yaml
+### 4.4 Configure Program Arguments
+
+In the **Program Arguments** (mainArgs) field, provide your Aiven Kafka bootstrap server:
+
+```
+--bootstrap-servers kafka-xxx.aivencloud.com:28739
+```
+
+Or set it via Flink Configuration (see below).
+
+### 4.5 Configure Flink Settings
+
+Add these Flink configuration options:
+
+```yaml
+# Kafka bootstrap servers (alternative to program args)
+env.KAFKA_BOOTSTRAP_SERVERS: kafka-xxx.aivencloud.com:28739
+
+# SSL passwords (if different from default 'changeit')
+env.KAFKA_SSL_TRUSTSTORE_PASSWORD: changeit
+env.KAFKA_SSL_KEYSTORE_PASSWORD: changeit
+
+# Checkpointing (recommended for production)
+execution.checkpointing.interval: 60s
+state.backend: hashmap
 ```
 
 ## Step 5: Start the Job
 
-1. In the Ververica UI, go to your deployment
-2. Click **Start**
-3. Monitor the job in the Flink Dashboard
+1. Click **Deploy** to create the deployment
+2. Click **Start** to run the job
+3. Monitor in the Flink Dashboard
 
-## Step 6: Update Your Local Setup
+## Step 6: Connect Your Local Components
 
-Your local ingestion and backend still run locally, but now Flink runs on Ververica:
+Your local ingestion and backend still run locally, connecting to the same Aiven Kafka:
 
 ```bash
-# Start only ingestion and backend locally
+# Start ingestion and backend (Flink now runs on Ververica)
 ./start.sh start
 
-# Stop the local Flink job (it's now on Ververica)
+# Stop any local Flink process (no longer needed)
 pkill -f "ais-watchdog-flink"
 ```
+
+The data flow:
+1. **Local Ingestion** → writes to `ais-raw` topic on Aiven Kafka
+2. **Ververica Flink** → reads from `ais-raw`, writes alerts to `ais-alerts`
+3. **Local Backend** → reads from both topics, serves to Frontend
+4. **Local Frontend** → displays vessels and alerts
 
 ## Monitoring
 
 ### Ververica Dashboard
-- Job status, throughput, backpressure
+- Job status and uptime
+- Throughput metrics
 - Checkpoint history
 - Exception logs
 
-### Flink Metrics
-Key metrics to watch:
+### Key Metrics to Watch
 - `numRecordsInPerSecond` - Input rate from Kafka
 - `numRecordsOutPerSecond` - Alerts generated
-- `checkpointDuration` - Checkpoint latency
+- `currentInputWatermark` - Event time progress
 
 ## Troubleshooting
 
-### Job fails to start
-1. Check Ververica logs for SSL errors
-2. Verify secrets are correctly mounted
-3. Ensure Kafka bootstrap servers are reachable
+### Job fails to start with SSL errors
 
-### No data flowing
-1. Verify the `ais-raw` topic has data in Aiven Console
-2. Check consumer group offsets
-3. Verify Kafka security settings
-
-### SSL Certificate Errors
 ```
 SSL handshake failed
+PKIX path building failed
 ```
-- Regenerate certificates with `./scripts/setup-ssl.sh`
-- Re-upload to Ververica secrets
+
+**Solutions:**
+1. Verify certificates were uploaded correctly as Additional Dependencies
+2. Check that `truststore.jks` and `keystore.p12` are valid:
+   ```bash
+   keytool -list -keystore truststore.jks -storepass changeit
+   openssl pkcs12 -info -in keystore.p12 -passin pass:changeit
+   ```
+3. Regenerate certificates with `./scripts/setup-ssl.sh`
+
+### Job starts but no data flowing
+
+1. Check the `ais-raw` topic has data in Aiven Console
+2. Verify the ingestion is running locally: `curl http://localhost:8000/api/stats`
+3. Check Kafka bootstrap servers are correct
+4. Verify network connectivity (Ververica needs to reach Aiven's public endpoint)
+
+### ClassNotFoundException
+
+The JAR is missing dependencies. Rebuild with:
+```bash
+mvn clean package -Pververica -DskipTests
+```
+
+Ensure you're uploading `ais-guardian-ververica.jar` (not the regular JAR).
 
 ## Cost Optimization
 
-Ververica Cloud pricing is based on compute hours. To minimize costs:
+Ververica Cloud charges based on compute hours:
 
-1. **Use appropriate parallelism**: Start with 2, increase if needed
-2. **Right-size resources**: 1 CPU / 2GB memory per TaskManager is usually enough
-3. **Stop when not in use**: Use the UI or API to stop/start the job
+1. **Right-size parallelism**: Start with 2, increase only if needed
+2. **Use appropriate resources**: Default TaskManager sizing is usually sufficient
+3. **Stop when not in use**: Pause the deployment during development
 
-## Comparison: Local vs Ververica
+## Local vs Ververica Comparison
 
 | Aspect | Local | Ververica Cloud |
 |--------|-------|-----------------|
-| Setup | Simple, one command | Requires secret/artifact setup |
+| Setup | One command | Upload artifacts + configure |
 | Cost | Free (your machine) | Pay per compute hour |
-| Scaling | Limited by machine | Auto-scaling available |
+| Scaling | Limited by machine | Configurable parallelism |
 | Monitoring | Basic logs | Full Flink dashboard |
 | Reliability | Depends on machine | HA, automatic restarts |
-| Checkpoints | Local filesystem | S3/GCS (durable) |
+| Checkpoints | Local filesystem | Managed storage |
 
-## Next Steps
+## References
 
-- Set up **alerting** in Ververica for job failures
-- Configure **auto-scaling** based on Kafka lag
-- Add **savepoints** for zero-downtime upgrades
+- [Ververica Cloud Getting Started](https://docs.ververica.com/managed-service/getting-started/)
+- [Apache Kafka Connector](https://docs.ververica.com/connectors-and-formats/built-in-connectors/kafka)
+- [Artifact Management](https://docs.ververica.com/vvp/user-guide/application-operations/artifact-management/)
+- [Aiven Kafka SSL Setup](https://docs.aiven.io/docs/products/kafka/howto/keystore-truststore)
