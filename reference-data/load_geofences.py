@@ -9,7 +9,9 @@ from pathlib import Path
 from confluent_kafka import Producer
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load from project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 KAFKA_TOPIC = "reference-data"
 

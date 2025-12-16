@@ -37,6 +37,12 @@ ca.pem
 service.cert
 service.key
 
+# Java keystores (contain SSL certificates)
+*.jks
+*.p12
+truststore.jks
+keystore.p12
+
 # Logs
 *.log
 logs/

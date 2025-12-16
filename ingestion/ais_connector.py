@@ -29,9 +29,14 @@ import certifi
 import websockets
 from confluent_kafka import Producer
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from project root
+# Look in current directory first, then parent directory
+env_path = Path('.env')
+if not env_path.exists():
+    env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 # Configure logging
 logging.basicConfig(
@@ -318,8 +323,14 @@ class AISConnector:
                         callback=self._delivery_callback
                     )
 
-                    # Poll for delivery callbacks (non-blocking)
+                    # Poll aggressively for cloud Kafka (higher latency than local)
+                    # This processes delivery callbacks without blocking asyncio
                     self.producer.poll(0)
+
+                    # Periodic sync flush in executor to not block event loop
+                    if self.messages_received % 100 == 0:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, lambda: self.producer.flush(timeout=10))
 
                     # Log progress periodically
                     if self.messages_received % 100 == 0:

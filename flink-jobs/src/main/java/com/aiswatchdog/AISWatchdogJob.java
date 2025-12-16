@@ -264,23 +264,36 @@ public class AISWatchdogJob {
 
     /**
      * Build Kafka properties with SSL support for Aiven.
+     * Uses Java KeyStores (JKS/PKCS12) converted from PEM certificates.
      */
     private static Properties buildKafkaProperties(String bootstrapServers) {
         Properties props = new Properties();
 
-        // Check for SSL configuration (Aiven)
-        String sslCaLocation = System.getenv("KAFKA_SSL_CA_CERT");
-        String sslCertLocation = System.getenv("KAFKA_SSL_CERT");
-        String sslKeyLocation = System.getenv("KAFKA_SSL_KEY");
+        // Check for SSL configuration (Aiven) - using Java KeyStores
+        String truststoreLocation = System.getenv("KAFKA_SSL_TRUSTSTORE_LOCATION");
+        String truststorePassword = System.getenv("KAFKA_SSL_TRUSTSTORE_PASSWORD");
+        String keystoreLocation = System.getenv("KAFKA_SSL_KEYSTORE_LOCATION");
+        String keystorePassword = System.getenv("KAFKA_SSL_KEYSTORE_PASSWORD");
 
-        if (sslCaLocation != null && sslCertLocation != null && sslKeyLocation != null) {
-            LOG.info("Configuring SSL for Kafka connection");
+        if (truststoreLocation != null && keystoreLocation != null) {
+            LOG.info("Configuring SSL for Kafka connection (Aiven)");
+            LOG.info("Truststore: {}", truststoreLocation);
+            LOG.info("Keystore: {}", keystoreLocation);
+
             props.setProperty("security.protocol", "SSL");
-            props.setProperty("ssl.truststore.type", "PEM");
-            props.setProperty("ssl.truststore.location", sslCaLocation);
-            props.setProperty("ssl.keystore.type", "PEM");
-            props.setProperty("ssl.keystore.location", sslCertLocation);
-            props.setProperty("ssl.key.location", sslKeyLocation);
+
+            // Truststore (CA certificate)
+            props.setProperty("ssl.truststore.location", truststoreLocation);
+            props.setProperty("ssl.truststore.password", truststorePassword != null ? truststorePassword : "changeit");
+            props.setProperty("ssl.truststore.type", "JKS");
+
+            // Keystore (client certificate + key)
+            props.setProperty("ssl.keystore.location", keystoreLocation);
+            props.setProperty("ssl.keystore.password", keystorePassword != null ? keystorePassword : "changeit");
+            props.setProperty("ssl.keystore.type", "PKCS12");
+
+            // Key password (same as keystore password for PKCS12)
+            props.setProperty("ssl.key.password", keystorePassword != null ? keystorePassword : "changeit");
         }
 
         return props;
