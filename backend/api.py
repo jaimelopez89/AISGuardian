@@ -7,10 +7,10 @@ Uses FastAPI with Server-Sent Events for real-time updates.
 import asyncio
 import json
 import os
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from confluent_kafka import Consumer, KafkaError
 from dotenv import load_dotenv
@@ -37,6 +37,9 @@ app.add_middleware(
 
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
+# Vessel trails: store last N positions per vessel for trail visualization
+vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=50))
+TRAIL_MAX_POINTS = 50  # Max trail points per vessel
 alerts_list: list = []
 MAX_ALERTS = 500
 
@@ -77,6 +80,18 @@ async def consume_vessels():
             mmsi = data.get('mmsi')
             if mmsi:
                 vessel_state[mmsi] = data
+                # Store position in trail history
+                lat = data.get('latitude')
+                lon = data.get('longitude')
+                ts = data.get('timestamp', datetime.now(timezone.utc).isoformat())
+                if lat and lon:
+                    # Only add if position changed significantly (avoid duplicates)
+                    trail = vessel_trails[mmsi]
+                    if len(trail) == 0 or (
+                        abs(trail[-1][0] - lat) > 0.0001 or
+                        abs(trail[-1][1] - lon) > 0.0001
+                    ):
+                        trail.append((lat, lon, ts))
 
         except Exception as e:
             print(f"Error consuming vessel: {e}")
@@ -163,6 +178,52 @@ async def get_vessel(mmsi: str):
     if vessel:
         return vessel
     return {"error": "Vessel not found"}
+
+
+@app.get("/api/trails")
+async def get_trails(mmsi: Optional[str] = Query(None)):
+    """Get vessel trails (recent position history).
+
+    Returns trails as GeoJSON LineStrings for easy mapping.
+    If mmsi is provided, returns only that vessel's trail.
+    """
+    if mmsi:
+        # Single vessel trail
+        trail = vessel_trails.get(mmsi, [])
+        if len(trail) < 2:
+            return {"trails": [], "count": 0}
+
+        coordinates = [[point[1], point[0]] for point in trail]  # GeoJSON is [lon, lat]
+        return {
+            "trails": [{
+                "mmsi": mmsi,
+                "coordinates": coordinates,
+                "timestamps": [point[2] for point in trail],
+                "point_count": len(coordinates)
+            }],
+            "count": 1
+        }
+
+    # All vessel trails
+    trails = []
+    for vessel_mmsi, trail in vessel_trails.items():
+        if len(trail) >= 2:  # Need at least 2 points for a line
+            coordinates = [[point[1], point[0]] for point in trail]  # GeoJSON is [lon, lat]
+            vessel = vessel_state.get(vessel_mmsi, {})
+            trails.append({
+                "mmsi": vessel_mmsi,
+                "coordinates": coordinates,
+                "timestamps": [point[2] for point in trail],
+                "point_count": len(coordinates),
+                "ship_name": vessel.get('ship_name', ''),
+                "ship_type": vessel.get('ship_type', 0)
+            })
+
+    return {
+        "trails": trails,
+        "count": len(trails),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 
 @app.get("/api/stats")

@@ -3,9 +3,9 @@ import Map from './components/Map'
 import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
-import { useVesselPositions, useAlerts } from './hooks/useKafkaStream'
-import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers } from 'lucide-react'
-import { getVesselCategory } from './utils/geo'
+import { useVesselPositions, useAlerts, useTrails } from './hooks/useKafkaStream'
+import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route } from 'lucide-react'
+import { getVesselCategory, BALTIC_PORTS } from './utils/geo'
 
 // Get Mapbox token from environment
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
@@ -35,6 +35,10 @@ export default function App() {
   const [enabledVesselTypes, setEnabledVesselTypes] = useState(new Set(ALL_VESSEL_TYPES))
   const [showOnlyAlerts, setShowOnlyAlerts] = useState(false)
   const [showMapControls, setShowMapControls] = useState(false)
+
+  // Map layer visibility
+  const [showTrails, setShowTrails] = useState(true)
+  const [showPorts, setShowPorts] = useState(true)
 
   // Toggle a vessel type on/off
   const toggleVesselType = useCallback((typeKey) => {
@@ -76,6 +80,12 @@ export default function App() {
     stats: alertStats,
   } = useAlerts({
     pollInterval: 1000,
+  })
+
+  // Fetch vessel trails
+  const { trails } = useTrails({
+    pollInterval: 5000,
+    enabled: showTrails,
   })
 
   const isConnected = vesselsConnected || alertsConnected
@@ -165,9 +175,13 @@ export default function App() {
           <Map
             vessels={displayVessels}
             alerts={displayAlerts}
+            trails={trails}
+            ports={BALTIC_PORTS}
             selectedVessel={selectedVessel}
             onVesselClick={handleVesselClick}
             mapboxToken={MAPBOX_TOKEN}
+            showTrails={showTrails}
+            showPorts={showPorts}
           />
 
           {/* Selected Vessel Card */}
@@ -195,17 +209,49 @@ export default function App() {
 
             {showMapControls && (
               <div className="absolute bottom-14 left-0 glass-panel p-4 w-64 space-y-4">
-                <div className="text-sm font-medium text-white">Map Filters</div>
+                <div className="text-sm font-medium text-white">Map Layers</div>
 
-                {/* Alerts Only Toggle */}
+                {/* Trails Toggle */}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-maritime-300">Show only vessels with alerts</span>
+                  <div className="flex items-center gap-2">
+                    <Route className="w-4 h-4 text-maritime-400" />
+                    <span className="text-sm text-maritime-300">Vessel Trails</span>
+                  </div>
                   <button
-                    onClick={() => setShowOnlyAlerts(!showOnlyAlerts)}
-                    className={`p-1.5 rounded ${showOnlyAlerts ? 'bg-blue-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                    onClick={() => setShowTrails(!showTrails)}
+                    className={`p-1.5 rounded ${showTrails ? 'bg-blue-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
                   >
-                    {showOnlyAlerts ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    {showTrails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
+                </div>
+
+                {/* Ports Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Anchor className="w-4 h-4 text-maritime-400" />
+                    <span className="text-sm text-maritime-300">Ports</span>
+                  </div>
+                  <button
+                    onClick={() => setShowPorts(!showPorts)}
+                    className={`p-1.5 rounded ${showPorts ? 'bg-blue-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                  >
+                    {showPorts ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <div className="border-t border-maritime-700 pt-3">
+                  <div className="text-sm font-medium text-white mb-3">Vessel Filters</div>
+
+                  {/* Alerts Only Toggle */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-maritime-300">Show only vessels with alerts</span>
+                    <button
+                      onClick={() => setShowOnlyAlerts(!showOnlyAlerts)}
+                      className={`p-1.5 rounded ${showOnlyAlerts ? 'bg-blue-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                    >
+                      {showOnlyAlerts ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Vessel Type Filter */}

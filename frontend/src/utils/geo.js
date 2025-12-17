@@ -504,3 +504,190 @@ export function getInfrastructureIcon(type) {
   }
   return icons[type] || '📍'
 }
+
+/**
+ * Major Baltic Sea ports.
+ * Approximate boundary polygons for port areas.
+ */
+export const BALTIC_PORTS = [
+  {
+    id: 'PORT-HELSINKI',
+    name: 'Helsinki',
+    country: 'Finland',
+    type: 'Major Commercial Port',
+    center: [24.95, 60.16],
+    coordinates: [
+      [24.90, 60.18], [25.02, 60.18], [25.02, 60.14], [24.90, 60.14], [24.90, 60.18]
+    ]
+  },
+  {
+    id: 'PORT-TALLINN',
+    name: 'Tallinn',
+    country: 'Estonia',
+    type: 'Major Commercial Port',
+    center: [24.76, 59.45],
+    coordinates: [
+      [24.70, 59.47], [24.82, 59.47], [24.82, 59.43], [24.70, 59.43], [24.70, 59.47]
+    ]
+  },
+  {
+    id: 'PORT-RIGA',
+    name: 'Riga',
+    country: 'Latvia',
+    type: 'Major Commercial Port',
+    center: [24.08, 57.02],
+    coordinates: [
+      [24.00, 57.06], [24.15, 57.06], [24.15, 56.98], [24.00, 56.98], [24.00, 57.06]
+    ]
+  },
+  {
+    id: 'PORT-KLAIPEDA',
+    name: 'Klaipėda',
+    country: 'Lithuania',
+    type: 'Major Commercial Port',
+    center: [21.12, 55.71],
+    coordinates: [
+      [21.06, 55.74], [21.18, 55.74], [21.18, 55.68], [21.06, 55.68], [21.06, 55.74]
+    ]
+  },
+  {
+    id: 'PORT-GDANSK',
+    name: 'Gdańsk',
+    country: 'Poland',
+    type: 'Major Commercial Port',
+    center: [18.66, 54.40],
+    coordinates: [
+      [18.58, 54.44], [18.75, 54.44], [18.75, 54.36], [18.58, 54.36], [18.58, 54.44]
+    ]
+  },
+  {
+    id: 'PORT-GDYNIA',
+    name: 'Gdynia',
+    country: 'Poland',
+    type: 'Container Terminal',
+    center: [18.55, 54.53],
+    coordinates: [
+      [18.50, 54.56], [18.60, 54.56], [18.60, 54.50], [18.50, 54.50], [18.50, 54.56]
+    ]
+  },
+  {
+    id: 'PORT-STOCKHOLM',
+    name: 'Stockholm',
+    country: 'Sweden',
+    type: 'Major Commercial Port',
+    center: [18.10, 59.32],
+    coordinates: [
+      [18.04, 59.35], [18.16, 59.35], [18.16, 59.29], [18.04, 59.29], [18.04, 59.35]
+    ]
+  },
+  {
+    id: 'PORT-GOTHENBURG',
+    name: 'Gothenburg',
+    country: 'Sweden',
+    type: 'Major Commercial Port',
+    center: [11.94, 57.70],
+    coordinates: [
+      [11.88, 57.73], [12.00, 57.73], [12.00, 57.67], [11.88, 57.67], [11.88, 57.73]
+    ]
+  },
+  {
+    id: 'PORT-MALMO',
+    name: 'Malmö',
+    country: 'Sweden',
+    type: 'Commercial Port',
+    center: [12.98, 55.60],
+    coordinates: [
+      [12.92, 55.63], [13.04, 55.63], [13.04, 55.57], [12.92, 55.57], [12.92, 55.63]
+    ]
+  },
+  {
+    id: 'PORT-COPENHAGEN',
+    name: 'Copenhagen',
+    country: 'Denmark',
+    type: 'Major Commercial Port',
+    center: [12.60, 55.70],
+    coordinates: [
+      [12.54, 55.73], [12.66, 55.73], [12.66, 55.67], [12.54, 55.67], [12.54, 55.73]
+    ]
+  },
+  {
+    id: 'PORT-ROSTOCK',
+    name: 'Rostock',
+    country: 'Germany',
+    type: 'Major Commercial Port',
+    center: [12.10, 54.15],
+    coordinates: [
+      [12.04, 54.18], [12.16, 54.18], [12.16, 54.12], [12.04, 54.12], [12.04, 54.18]
+    ]
+  },
+  {
+    id: 'PORT-KIEL',
+    name: 'Kiel',
+    country: 'Germany',
+    type: 'Naval & Commercial Port',
+    center: [10.14, 54.33],
+    coordinates: [
+      [10.08, 54.36], [10.20, 54.36], [10.20, 54.30], [10.08, 54.30], [10.08, 54.36]
+    ]
+  },
+  {
+    id: 'PORT-LUBECK',
+    name: 'Lübeck',
+    country: 'Germany',
+    type: 'Commercial Port',
+    center: [10.87, 53.92],
+    coordinates: [
+      [10.82, 53.95], [10.92, 53.95], [10.92, 53.89], [10.82, 53.89], [10.82, 53.95]
+    ]
+  },
+  {
+    id: 'PORT-STPETERSBURG',
+    name: 'St. Petersburg',
+    country: 'Russia',
+    type: 'Major Commercial Port',
+    center: [30.25, 59.93],
+    coordinates: [
+      [30.15, 59.98], [30.35, 59.98], [30.35, 59.88], [30.15, 59.88], [30.15, 59.98]
+    ]
+  },
+  {
+    id: 'PORT-KALININGRAD',
+    name: 'Kaliningrad',
+    country: 'Russia',
+    type: 'Commercial Port',
+    center: [20.50, 54.70],
+    coordinates: [
+      [20.44, 54.73], [20.56, 54.73], [20.56, 54.67], [20.44, 54.67], [20.44, 54.73]
+    ]
+  },
+  {
+    id: 'PORT-TURKU',
+    name: 'Turku',
+    country: 'Finland',
+    type: 'Commercial & Ferry Port',
+    center: [22.22, 60.43],
+    coordinates: [
+      [22.16, 60.46], [22.28, 60.46], [22.28, 60.40], [22.16, 60.40], [22.16, 60.46]
+    ]
+  },
+  {
+    id: 'PORT-VENTSPILS',
+    name: 'Ventspils',
+    country: 'Latvia',
+    type: 'Oil Terminal',
+    center: [21.55, 57.40],
+    coordinates: [
+      [21.49, 57.43], [21.61, 57.43], [21.61, 57.37], [21.49, 57.37], [21.49, 57.43]
+    ]
+  },
+  {
+    id: 'PORT-LIEPAJA',
+    name: 'Liepāja',
+    country: 'Latvia',
+    type: 'Commercial Port',
+    center: [21.02, 56.52],
+    coordinates: [
+      [20.96, 56.55], [21.08, 56.55], [21.08, 56.49], [20.96, 56.49], [20.96, 56.55]
+    ]
+  },
+]
