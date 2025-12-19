@@ -6,7 +6,7 @@
 
     <groupId>com.aiswatchdog</groupId>
     <artifactId>ais-watchdog-flink</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>AIS Watchdog Flink Jobs</name>
@@ -182,6 +182,82 @@
                     <scope>compile</scope>
                 </dependency>
             </dependencies>
+        </profile>
+
+        <!-- Profile for Ververica Cloud deployment -->
+        <profile>
+            <id>ververica</id>
+            <dependencies>
+                <!-- Flink core provided by Ververica runtime -->
+                <dependency>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-streaming-java</artifactId>
+                    <version>${flink.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-clients</artifactId>
+                    <version>${flink.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <!-- Exclude slf4j-simple as Ververica has its own logging -->
+                <dependency>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                    <version>${slf4j.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactSet>
+                                        <excludes>
+                                            <!-- Exclude Flink dependencies (provided by Ververica) -->
+                                            <exclude>org.apache.flink:flink-streaming-java</exclude>
+                                            <exclude>org.apache.flink:flink-clients</exclude>
+                                            <exclude>org.apache.flink:flink-core</exclude>
+                                            <exclude>org.apache.flink:flink-runtime</exclude>
+                                            <exclude>org.apache.flink:flink-java</exclude>
+                                            <exclude>org.apache.flink:flink-optimizer</exclude>
+                                            <exclude>org.apache.flink:flink-metrics-core</exclude>
+                                            <exclude>org.slf4j:slf4j-simple</exclude>
+                                        </excludes>
+                                    </artifactSet>
+                                    <filters>
+                                        <filter>
+                                            <artifact>*:*</artifact>
+                                            <excludes>
+                                                <exclude>META-INF/*.SF</exclude>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                            </excludes>
+                                        </filter>
+                                    </filters>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <mainClass>com.aiswatchdog.AISWatchdogJob</mainClass>
+                                        </transformer>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                    </transformers>
+                                    <finalName>ais-guardian-ververica</finalName>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

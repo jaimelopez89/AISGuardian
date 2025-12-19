@@ -88,7 +88,7 @@ check_prerequisites() {
     fi
 
     # Check for Flink JAR
-    if [[ ! -f "flink-jobs/target/ais-watchdog-flink-1.0-SNAPSHOT.jar" ]]; then
+    if [[ ! -f "flink-jobs/target/ais-watchdog-flink-1.0.0.jar" ]]; then
         echo -e "${YELLOW}Building Flink job...${NC}"
         cd flink-jobs && mvn clean package -q && cd ..
     fi
@@ -137,7 +137,7 @@ start_services() {
     if pgrep -f "ais-watchdog-flink" > /dev/null; then
         echo -e "${YELLOW}already running${NC}"
     else
-        java -jar flink-jobs/target/ais-watchdog-flink-1.0-SNAPSHOT.jar > "$LOG_DIR/flink.log" 2>&1 &
+        java -jar flink-jobs/target/ais-watchdog-flink-1.0.0.jar > "$LOG_DIR/flink.log" 2>&1 &
         sleep 5
         if pgrep -f "ais-watchdog-flink" > /dev/null; then
             echo -e "${GREEN}started${NC}"

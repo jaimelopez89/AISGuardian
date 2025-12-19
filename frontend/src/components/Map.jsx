@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import MapGL, { NavigationControl, ScaleControl } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
 import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer } from '@deck.gl/layers'
@@ -37,17 +37,37 @@ function createVesselIcon(fillColor, strokeColor = 'rgba(255,255,255,0.8)') {
 }
 
 /**
- * Main map component displaying vessels, alerts, and cable infrastructure.
+ * Main map component displaying vessels, alerts, trails, ports, and cable infrastructure.
  */
 export default function Map({
   vessels = [],
   alerts = [],
+  trails = [],
+  ports = [],
+  cables = [],
   selectedVessel,
   onVesselClick,
   mapboxToken,
+  showTrails = true,
+  showPorts = true,
+  showCables = true,
+  flyTo = null,  // { latitude, longitude, zoom? } - fly to this location
 }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE)
   const [hoverInfo, setHoverInfo] = useState(null)
+
+  // Handle flyTo prop changes - animate to new location
+  useEffect(() => {
+    if (flyTo && flyTo.latitude && flyTo.longitude) {
+      setViewState(prev => ({
+        ...prev,
+        latitude: flyTo.latitude,
+        longitude: flyTo.longitude,
+        zoom: flyTo.zoom || 10,
+        transitionDuration: 1000,
+      }))
+    }
+  }, [flyTo])
 
   // Pre-generate icon URLs for vessel types
   const vesselIcons = useMemo(() => {
@@ -62,10 +82,12 @@ export default function Map({
 
   // Cable protection zone layers - filled polygons with animated borders
   const cableZoneLayers = useMemo(() => {
+    if (!showCables || cables.length === 0) return []
+
     // Fill layer
     const fillLayer = new PolygonLayer({
       id: 'cable-zones-fill',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: true,
       stroked: false,
       filled: true,
@@ -84,7 +106,7 @@ export default function Map({
     // Border layer with glow effect
     const borderLayer = new PathLayer({
       id: 'cable-zones-border',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: false,
       widthUnits: 'pixels',
       widthScale: 1,
@@ -97,7 +119,7 @@ export default function Map({
     // Outer glow for critical zones
     const glowLayer = new PathLayer({
       id: 'cable-zones-glow',
-      data: BALTIC_CABLE_GEOFENCES.filter(z => z.severity === 'CRITICAL'),
+      data: cables.filter(z => z.severity === 'CRITICAL'),
       pickable: false,
       widthUnits: 'pixels',
       widthScale: 1,
@@ -107,15 +129,15 @@ export default function Map({
     })
 
     return [glowLayer, fillLayer, borderLayer]
-  }, [hoverInfo])
+  }, [cables, showCables, hoverInfo])
 
   // Cable zone labels
   const cableLabelLayer = useMemo(() => {
-    if (viewState.zoom < 6) return null
+    if (!showCables || cables.length === 0 || viewState.zoom < 6) return null
 
     return new TextLayer({
       id: 'cable-labels',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: false,
       getPosition: d => {
         // Get centroid of polygon
@@ -134,7 +156,7 @@ export default function Map({
       outlineWidth: 2,
       outlineColor: [15, 23, 42, 255],
     })
-  }, [viewState.zoom])
+  }, [cables, showCables, viewState.zoom])
 
   // Vessel layer - arrows showing heading direction
   const vesselLayer = useMemo(() => new ScatterplotLayer({
@@ -240,6 +262,79 @@ export default function Map({
     },
   }), [vessels])
 
+  // Vessel trails layer - shows recent position history as fading lines
+  const trailsLayer = useMemo(() => {
+    if (!showTrails || trails.length === 0) return null
+
+    return new PathLayer({
+      id: 'vessel-trails',
+      data: trails,
+      pickable: false,
+      widthUnits: 'pixels',
+      widthScale: 1,
+      widthMinPixels: 1,
+      widthMaxPixels: 3,
+      capRounded: true,
+      jointRounded: true,
+      getPath: d => d.coordinates,
+      getColor: d => {
+        // Color based on vessel type
+        const shipType = d.ship_type || 0
+        const color = getVesselColor(shipType)
+        return [...color, 120] // Semi-transparent
+      },
+      getWidth: 2,
+    })
+  }, [trails, showTrails])
+
+  // Ports layer - shows port boundaries
+  const portsLayer = useMemo(() => {
+    if (!showPorts || ports.length === 0) return null
+
+    return new PolygonLayer({
+      id: 'ports',
+      data: ports,
+      pickable: true,
+      stroked: true,
+      filled: true,
+      extruded: false,
+      wireframe: false,
+      getPolygon: d => d.coordinates,
+      getFillColor: [100, 149, 237, 40], // Cornflower blue, very transparent
+      getLineColor: [100, 149, 237, 180],
+      getLineWidth: 2,
+      lineWidthUnits: 'pixels',
+      onHover: info => {
+        if (info.object) {
+          setHoverInfo({ ...info, isPort: true })
+        } else if (hoverInfo?.isPort) {
+          setHoverInfo(null)
+        }
+      },
+    })
+  }, [ports, showPorts, hoverInfo])
+
+  // Port labels
+  const portLabelLayer = useMemo(() => {
+    if (!showPorts || ports.length === 0 || viewState.zoom < 7) return null
+
+    return new TextLayer({
+      id: 'port-labels',
+      data: ports,
+      pickable: false,
+      getPosition: d => d.center || d.coordinates[0],
+      getText: d => `⚓ ${d.name}`,
+      getSize: 11,
+      getColor: [100, 149, 237, 255],
+      getTextAnchor: 'middle',
+      getAlignmentBaseline: 'center',
+      fontFamily: 'Monaco, monospace',
+      fontWeight: 'bold',
+      outlineWidth: 2,
+      outlineColor: [15, 23, 42, 255],
+    })
+  }, [ports, showPorts, viewState.zoom])
+
   // Alert layer - shows alert locations as pulsing markers
   const alertLayer = useMemo(() => new ScatterplotLayer({
     id: 'alerts',
@@ -293,6 +388,9 @@ export default function Map({
   const layers = [
     ...cableZoneLayers,
     cableLabelLayer,
+    portsLayer,
+    portLabelLayer,
+    trailsLayer,
     vesselLayer,
     headingLayer,
     alertLayer,
@@ -303,7 +401,7 @@ export default function Map({
   const renderTooltip = () => {
     if (!hoverInfo) return null
 
-    const { x, y, object, isAlert, isVessel, isCableZone } = hoverInfo
+    const { x, y, object, isAlert, isVessel, isCableZone, isPort } = hoverInfo
 
     if (isCableZone) {
       return (
@@ -326,6 +424,26 @@ export default function Map({
             }`}>
               {object.severity} INFRASTRUCTURE
             </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (isPort) {
+      return (
+        <div
+          className="absolute pointer-events-none z-50"
+          style={{ left: x + 15, top: y + 15 }}
+        >
+          <div className="bg-slate-900/95 backdrop-blur-sm border border-slate-600 rounded-lg p-3 shadow-2xl max-w-xs">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">⚓</span>
+              <div className="font-bold text-white text-sm">{object.name}</div>
+            </div>
+            <div className="text-slate-400 text-xs">{object.country}</div>
+            {object.type && (
+              <div className="text-slate-500 text-xs mt-1">{object.type}</div>
+            )}
           </div>
         </div>
       )

@@ -1,18 +1,20 @@
-# AIS Watchdog: Real-Time Maritime Anomaly Detection
+# AIS Guardian: Real-Time Maritime Anomaly Detection
 
 ## Project Overview
 
-AIS Watchdog is a real-time streaming application that monitors Automatic Identification System (AIS) data from vessels worldwide to detect potentially illegal activities including:
+AIS Guardian is a real-time streaming application that monitors Automatic Identification System (AIS) data from vessels in the Baltic Sea to detect potential threats to critical undersea infrastructure, including:
 
-- **Illegal fishing** in protected waters
-- **Sanctions evasion** through ship-to-ship transfers or AIS manipulation
-- **"Going dark"** events where vessels intentionally disable transponders
+- **Cable proximity violations**: Vessels loitering near undersea cables/pipelines
+- **AIS "going dark"**: Vessels that stop transmitting (potential tampering)
+- **Geofence violations**: Unauthorized entry into restricted zones
+- **Rendezvous detection**: Ship-to-ship meetings in open water
+- **Illegal fishing**: Fishing patterns in marine protected areas
 
-This project is being built for the Aiven Free Kafka Competition ($5,000 prize, deadline Jan 31, 2026). It demonstrates the power of combining **Aiven's free Kafka tier** with **Apache Flink** (via Ververica) for critical infrastructure monitoring.
+This project is built for the Aiven Free Kafka Competition ($5,000 prize, deadline Jan 31, 2026). It demonstrates the power of combining **Aiven's free Kafka tier** with **Apache Flink** for critical infrastructure monitoring.
 
 ### The Story Angle
 
-The project creator (Jaime) is Head of Marketing at Ververica (the creators of Apache Flink) and previously worked at Aiven. This project demonstrates how Kafka and Flink are complementary technologies—not competitors—in the streaming ecosystem.
+The project demonstrates how Kafka and Flink are complementary technologies in the streaming ecosystem - Kafka for reliable message delivery, Flink for stateful stream processing and complex event detection.
 
 ---
 
@@ -20,181 +22,171 @@ The project creator (Jaime) is Head of Marketing at Ververica (the creators of A
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   AIS Source    │────▶│  Kafka (Aiven)  │────▶│ Flink (Ververica)│
-│  (AISStream)    │     │   Free Tier     │     │                 │
+│   AISStream.io  │────▶│  Aiven Kafka    │────▶│  Apache Flink   │
+│   WebSocket     │     │  (Cloud)        │     │  (Local/Cloud)  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                        ┌───────────────────────────────┼───────────────────────────────┐
-                        │                               │                               │
-                        ▼                               ▼                               ▼
-               ┌─────────────────┐             ┌─────────────────┐             ┌─────────────────┐
-               │  Dark Event     │             │   Geofence      │             │   Rendezvous    │
-               │  Detector       │             │   Violations    │             │   Detector      │
-               └────────┬────────┘             └────────┬────────┘             └────────┬────────┘
-                        │                               │                               │
-                        └───────────────────────────────┼───────────────────────────────┘
-                                                        ▼
-                                               ┌─────────────────┐
-                                               │  alerts topic   │
-                                               │    (Kafka)      │
-                                               └────────┬────────┘
-                                                        │
-                                          ┌─────────────┴─────────────┐
-                                          ▼                           ▼
-                                   ┌─────────────┐             ┌─────────────┐
-                                   │  Live Map   │             │  Alert Feed │
-                                   │   (React)   │             │  (Webhook)  │
-                                   └─────────────┘             └─────────────┘
+        │                       │                       │
+        │               ┌───────┴───────┐               │
+        │               │  FastAPI      │◀──────────────┤
+        │               │  Backend      │               │
+        │               └───────┬───────┘               │
+        │                       │                       │
+        │                       ▼                       │
+        │               ┌─────────────────┐             │
+        │               │  React Frontend │             │
+        │               │  (Mapbox/Deck)  │             │
+        │               └─────────────────┘             │
+        │                                               │
+        ▼                                               ▼
+   ┌─────────────────────────────────────────────────────────┐
+   │                    KAFKA TOPICS                         │
+   │  ais-raw │ alerts │ reference-data                      │
+   └─────────────────────────────────────────────────────────┘
 ```
+
+### Data Flow
+
+1. **AIS Ingestion** (`ingestion/ais_connector.py`):
+   - Connects to AISStream.io WebSocket
+   - Filters to Baltic Sea region (54°N-61°N, 12°E-31°E)
+   - Normalizes messages and produces to `ais-raw` topic on Aiven Kafka
+
+2. **Stream Processing** (`flink-jobs/`):
+   - Consumes from `ais-raw` topic
+   - Runs multiple parallel detectors:
+     - Cable Proximity Detector
+     - Geofence Violation Detector
+     - Dark Event Detector
+     - Rendezvous Detector
+     - Fishing Pattern Detector
+   - Produces alerts to `alerts` topic
+
+3. **Backend API** (`backend/api.py`):
+   - FastAPI server consuming from Kafka topics
+   - Maintains in-memory vessel state
+   - Serves REST endpoints for frontend
+
+4. **Frontend** (`frontend/`):
+   - React + Vite application
+   - Mapbox GL for map rendering
+   - Deck.gl for vessel visualization
+   - Polls backend API for updates
 
 ---
 
 ## Tech Stack
 
-### Infrastructure
+### Infrastructure (Cloud Services)
 - **Kafka**: Aiven Free Tier (250 kb/s throughput, 5 topics, 3-day retention)
-- **Stream Processing**: Apache Flink on Ververica Cloud (or local for dev)
-- **Frontend**: React + Mapbox GL JS + Deck.gl
-- **Ingestion**: Python with websocket client
+- **Stream Processing**: Apache Flink (local or Ververica Cloud)
 
-### Constraints (Aiven Free Tier)
+### Local Services
+- **Ingestion**: Python 3.11+, asyncio, websockets, confluent-kafka
+- **Backend**: Python FastAPI, uvicorn
+- **Frontend**: React 18, Vite, Tailwind CSS, Mapbox GL, Deck.gl
+
+### Aiven Free Tier Constraints
 - Max 250 kb/s throughput (IN+OUT combined)
 - Max 5 topics with 2 partitions each
 - 3-day retention
-- Free Schema Registry and REST proxy included
+- SSL required for all connections
 
 ---
 
 ## Kafka Topics
 
-We have exactly 5 topics to work with:
-
-| Topic | Purpose | Key | Notes |
-|-------|---------|-----|-------|
-| `ais-raw` | Raw AIS messages from feed | `mmsi` | High volume, filtered by region |
-| `ais-enriched` | Positions + vessel metadata + flag state | `mmsi` | Output of enrichment job |
-| `alerts` | Detected anomalies | `mmsi` | All alert types combined |
-| `vessel-state` | Compacted topic for latest known state per vessel | `mmsi` | Used for gap detection |
-| `reference-data` | Sanctions lists, vessel registry | `entity_id` | Bootstrap on startup |
-
----
-
-## Data Sources
-
-### Primary: AIS Stream
-**AISStream.io** (recommended - free WebSocket API)
-- URL: wss://stream.aisstream.io/v0/stream
-- Requires free API key (sign up at aisstream.io)
-- Delivers decoded JSON messages
-- Can filter by geographic bounding box and message type
-
-Alternative: **AISHub** (requires membership approval)
-
-### Reference Data (Static, bootstrapped)
-
-#### Sanctions Lists
-- **OFAC SDN List** (US Treasury): https://sanctionslist.ofac.treas.gov/Home/SdnList
-- **EU Consolidated List**: https://data.europa.eu/data/datasets/consolidated-list-of-persons-groups-and-entities-subject-to-eu-financial-sanctions
-
-#### Geofences (GeoJSON)
-- **EEZ Boundaries**: https://marineregions.org/downloads.php
-- **Marine Protected Areas**: Global Fishing Watch
-- **Sanctioned nation EEZs**: North Korea, Russia, Iran (extract from EEZ dataset)
-
-#### Vessel Registry
-- **ITU MARS**: Maritime mobile Access and Retrieval System
-- **Equasis**: Manual lookup for vessel ownership chains
+| Topic | Purpose | Key | Cleanup |
+|-------|---------|-----|---------|
+| `ais-raw` | Raw AIS positions from AISStream | `mmsi` | delete |
+| `alerts` | Detected anomalies from Flink | `mmsi` | delete |
+| `reference-data` | Geofences, ports, cables | `entity_id` | compact |
 
 ---
 
 ## Detection Logic
 
-### 1. "Going Dark" Detection
+### 1. Cable Proximity Detection
 
-A vessel "goes dark" when it stops transmitting AIS, potentially to hide illegal activity.
+Monitors vessels near critical undersea infrastructure:
+
+```
+PROTECTED CABLES:
+- C-Lion1: Finland-Germany submarine cable
+- Balticconnector: Finland-Estonia gas pipeline
+- Estlink 1 & 2: Finland-Estonia power cables
+- NordBalt: Sweden-Lithuania power cable
+- SwePol: Sweden-Poland power cable
+
+ALERT CONDITIONS:
+- Vessel within 2km of cable route
+- Speed < 2 knots (stopped/drifting)
+- Duration > 30 minutes
+
+SEVERITY LEVELS:
+- MEDIUM: Any vessel loitering near cables
+- HIGH: Flagged states (RU, CN, HK, IR, KP) near cables
+- CRITICAL: AIS gap while in cable zone
+```
+
+### 2. "Going Dark" Detection
+
+Detects when vessels stop transmitting AIS:
 
 ```
 ALERT CONDITIONS:
-- Previous transmission rate: >1 message per 5 minutes (was actively transmitting)
+- Previous transmission rate: >1 message per 5 minutes
 - Current gap: >2 hours with no messages
-- Last known position: not in port (speed >0.5 knots OR >5nm from nearest port)
-- Vessel type: cargo, tanker, or fishing (exclude pleasure craft)
+- Last known position: not in port (speed >0.5 knots)
 
 SEVERITY LEVELS:
 - LOW: 2-6 hour gap (possible equipment failure)
 - MEDIUM: 6-24 hour gap (suspicious)
 - HIGH: >24 hour gap (likely intentional)
-- CRITICAL: Any gap near sensitive zone (sanctioned waters, MPA)
+- CRITICAL: Gap while in sensitive zone
 ```
 
-### 2. Geofence Violations
+### 3. Geofence Violations
 
-Detect when vessels enter prohibited or sensitive zones.
+Detects entry into restricted zones:
 
 ```
-ZONES TO MONITOR:
+ZONES MONITORED:
 - Marine Protected Areas (fishing vessels)
-- Sanctioned nation EEZs (all vessels)
+- Cable protection zones
 - Restricted military zones
-- IUU fishing hotspots
 
 ALERT INCLUDES:
 - Zone name and type
 - Time of entry
-- Time spent in zone
 - Vessel flag state vs zone jurisdiction
 ```
 
-### 3. Rendezvous Detection
+### 4. Rendezvous Detection
 
-Ship-to-ship transfers in open ocean are a common sanctions evasion tactic.
+Detects ship-to-ship meetings:
 
 ```
 ALERT CONDITIONS:
 - Two vessels within 500 meters
 - Duration: >30 minutes
-- Location: >50 nautical miles from any port
-- At least one vessel is flagged (sanctions list, dark history, or flag of convenience)
-
-ADDITIONAL SIGNALS:
-- Both vessels stopped or drifting (<2 knots)
-- AIS gaps before or after meeting
-- Mismatched vessel types (e.g., tanker + fishing boat)
+- Location: >20 nautical miles from any port
+- Both vessels slow or stopped (<3 knots)
 ```
 
-### 4. Fishing Behavior Classification
+### 5. Fishing Pattern Detection
 
-Identify fishing activity based on movement patterns, flag when in protected areas.
+Identifies fishing behavior in protected areas:
 
 ```
-FISHING PATTERN FEATURES:
+FISHING INDICATORS:
 - Average speed: <5 knots
 - Speed variance: high (start/stop pattern)
-- Course changes: >10 significant changes per hour (>30° deviation)
-- Area covered: <100 sq nautical miles (working a specific zone)
+- Course changes: >10 significant changes per hour
+- Area covered: concentrated (<100 sq NM)
 
 ALERT IF:
-- Fishing pattern detected in Marine Protected Area
+- Fishing pattern in Marine Protected Area
 - Non-fishing vessel type exhibiting fishing behavior
-- Fishing in foreign EEZ without likely permit
-```
-
-### 5. Sanctions Match
-
-Direct matching against sanctions databases.
-
-```
-MATCH CRITERIA:
-- MMSI (exact match)
-- IMO number (exact match)
-- Vessel name (fuzzy match, Levenshtein distance ≤3)
-- Flag state: North Korea, Iran = automatic flag
-- Historical flag changes: >2 changes in 12 months = suspicious
-
-ENRICH WITH:
-- Sanctions list source (OFAC, EU, UN)
-- Date added to list
-- Reason for listing
 ```
 
 ---
@@ -202,160 +194,154 @@ ENRICH WITH:
 ## Project Structure
 
 ```
-ais-watchdog/
-├── PROJECT_CONTEXT.md          # This file
-├── README.md                   # Public-facing documentation
-│
-├── infra/
-│   ├── terraform/              # Aiven Kafka provisioning
-│   │   └── main.tf
-│   ├── docker-compose.yml      # Local development stack
-│   └── .env.example            # Environment variables template
+AISguardian/
+├── .env.example             # Environment template
+├── start.sh                 # Service management script
+├── SERVICE_MANAGEMENT.md    # Service control docs
 │
 ├── ingestion/
-│   ├── ais_connector.py        # WebSocket client → Kafka producer
-│   ├── reference_loader.py     # Bootstrap sanctions/geofence data
+│   ├── ais_connector.py     # WebSocket → Kafka producer
 │   └── requirements.txt
 │
-├── flink-jobs/
-│   ├── pom.xml                 # Maven project for Flink jobs
-│   ├── src/main/java/
-│   │   ├── enrichment/         # Enrich raw AIS with reference data
-│   │   ├── detectors/
-│   │   │   ├── DarkEventDetector.java
-│   │   │   ├── GeofenceViolationDetector.java
-│   │   │   ├── RendezvousDetector.java
-│   │   │   └── FishingPatternDetector.java
-│   │   ├── models/             # POJOs for AIS messages, alerts, etc.
-│   │   └── utils/              # Geo calculations, time windows
-│   └── src/main/resources/
-│       └── application.properties
+├── backend/
+│   └── api.py               # FastAPI server (Kafka → REST)
 │
-├── reference-data/
-│   ├── sanctions/
-│   │   ├── ofac_sdn.json       # Processed OFAC list
-│   │   └── eu_sanctions.json   # Processed EU list
-│   ├── geofences/
-│   │   ├── eez_boundaries.geojson
-│   │   ├── mpa_zones.geojson
-│   │   └── sanctioned_eez.geojson
-│   └── ports/
-│       └── world_ports.json    # For "in port" detection
+├── flink-jobs/
+│   ├── pom.xml
+│   └── src/main/java/
+│       ├── AISWatchdogJob.java
+│       ├── detectors/
+│       │   ├── CableProximityDetector.java
+│       │   ├── DarkEventDetector.java
+│       │   ├── GeofenceViolationDetector.java
+│       │   ├── RendezvousDetector.java
+│       │   └── FishingPatternDetector.java
+│       ├── models/
+│       └── utils/
 │
 ├── frontend/
 │   ├── package.json
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── components/
-│   │   │   ├── Map.jsx         # Mapbox GL + Deck.gl vessel layer
-│   │   │   ├── AlertFeed.jsx   # Real-time alert stream
-│   │   │   ├── VesselCard.jsx  # Detail view on click
-│   │   │   └── Heatmap.jsx     # Anomaly density visualization
-│   │   ├── hooks/
-│   │   │   └── useKafkaStream.js  # WebSocket to Kafka REST proxy
-│   │   └── utils/
-│   │       └── geo.js          # Frontend geo utilities
-│   └── public/
+│   └── src/
+│       ├── App.jsx
+│       ├── components/
+│       │   ├── Map.jsx
+│       │   └── AlertFeed.jsx
+│       └── hooks/
+│
+├── reference-data/
+│   ├── geofences/
+│   │   └── cables.geojson   # Cable protection zones
+│   └── ports/
+│       └── baltic_ports.json
+│
+├── scripts/
+│   └── setup-ssl.sh         # PEM → JKS conversion
 │
 └── docs/
     ├── architecture.md
-    ├── detection-logic.md
-    └── social-content-plan.md  # For the competition story
+    ├── deployment.md
+    └── data-formats.md
 ```
-
----
-
-## Implementation Order
-
-Build in this sequence to have working demos at each stage:
-
-### Phase 1: Data Pipeline (Week 1)
-1. Set up Aiven Kafka (Terraform or console)
-2. Build `ais_connector.py` - connect to AISStream, produce to Kafka
-3. Verify data flowing with console consumer
-4. Build `reference_loader.py` - bootstrap sanctions and geofence data
-
-### Phase 2: Basic Detection (Week 2)
-5. Create Flink project skeleton with Kafka connectors
-6. Implement enrichment job (join AIS with reference data)
-7. Implement simplest detector: Geofence violations (stateless, just point-in-polygon)
-8. Verify alerts appearing in alerts topic
-
-### Phase 3: Stateful Detection (Week 3)
-9. Implement vessel state tracking (keyed state in Flink)
-10. Implement "going dark" detector (requires tracking last seen time)
-11. Implement rendezvous detector (windowed, multi-vessel)
-
-### Phase 4: Frontend (Week 4)
-12. Basic React app with Mapbox
-13. Connect to Kafka REST proxy for live vessel positions
-14. Add alert feed component
-15. Polish: heatmaps, vessel detail cards, filters
-
-### Phase 5: Polish & Content (Final Week)
-16. Deploy to cloud (Ververica Cloud for Flink)
-17. Create demo video
-18. Write blog post / social content
-19. Document everything in README
 
 ---
 
 ## Environment Variables
 
 ```bash
-# Aiven Kafka
-KAFKA_BOOTSTRAP_SERVERS=your-kafka.aivencloud.com:12345
-KAFKA_SSL_CA_CERT=/path/to/ca.pem
-KAFKA_SSL_CERT=/path/to/service.cert
-KAFKA_SSL_KEY=/path/to/service.key
-
-# AISStream
+# AISStream.io
 AISSTREAM_API_KEY=your_api_key_here
 
-# Mapbox (Frontend)
-MAPBOX_ACCESS_TOKEN=your_token_here
+# Aiven Kafka
+KAFKA_BOOTSTRAP_SERVERS=kafka-xxx.aivencloud.com:12345
+KAFKA_SSL_CA_CERT=./ca.pem
+KAFKA_SSL_CERT=./service.cert
+KAFKA_SSL_KEY=./service.key
 
-# Optional: Ververica Cloud
-VERVERICA_API_TOKEN=your_token_here
-VERVERICA_NAMESPACE=default
+# Java KeyStores (for Flink)
+KAFKA_SSL_TRUSTSTORE_LOCATION=./truststore.jks
+KAFKA_SSL_TRUSTSTORE_PASSWORD=changeit
+KAFKA_SSL_KEYSTORE_LOCATION=./keystore.p12
+KAFKA_SSL_KEYSTORE_PASSWORD=changeit
+
+# Mapbox (Frontend)
+VITE_MAPBOX_TOKEN=pk.xxx
 ```
 
 ---
 
 ## Key Technical Decisions
 
-### Why AISStream over AISHub?
-- WebSocket API (real-time, no polling)
-- Free tier with reasonable limits
-- Can filter server-side by bounding box (reduces throughput)
-- JSON output (no NMEA parsing needed)
+### Why Aiven Kafka?
+- Managed service with SSL security
+- Free tier sufficient for demo (250 kb/s)
+- No infrastructure management needed
+- Built-in monitoring
 
-### Why Flink over Kafka Streams?
-- Better suited for complex event processing (CEP)
-- Native windowing for rendezvous detection
-- Ververica Cloud provides managed deployment
-- Demonstrates Kafka + Flink complementary story
+### Why Apache Flink?
+- Native windowing for time-based detection
+- Stateful processing for vessel tracking
+- Broadcast state for geofence matching
+- Can run locally or on Ververica Cloud
 
-### Why Mapbox over alternatives?
-- Free tier: 50k map loads/month (plenty for demo)
-- Deck.gl integration for high-performance vessel rendering
-- Good documentation, React bindings
+### Why FastAPI Backend?
+- Bridges Kafka to REST API (simpler than Kafka REST Proxy with auth)
+- In-memory state for fast vessel lookups
+- SSE support for real-time updates
+- Lightweight Python deployment
+
+### Why Baltic Sea Focus?
+- Critical undersea infrastructure (cables, pipelines)
+- Recent incidents (Nord Stream, Balticconnector)
+- Manageable geographic scope for free tier limits
+- High relevance for European security
 
 ### Geographic Filtering Strategy
 To stay under 250 kb/s:
-- Filter AIS feed to specific regions (e.g., Mediterranean, or Baltic Sea)
-- Focus on high-interest areas (near sanctioned nations, known fishing grounds)
-- Sample global data if needed (1 in N messages)
+- Filter to Baltic Sea bounding box (54°N-61°N, 12°E-31°E)
+- Rate limit at 100 kb/s (conservative buffer)
+- GZIP compression on all Kafka messages
+
+---
+
+## Deployment Options
+
+### Local Development
+All services run locally, connecting to Aiven Kafka in the cloud:
+```bash
+./start.sh
+```
+
+### Production (Ververica Cloud)
+For managed Flink deployment:
+1. Build production JAR: `mvn clean package`
+2. Upload to Ververica Cloud
+3. Configure Kafka SSL via environment variables
+4. Deploy and monitor via dashboard
+
+See [docs/deployment.md](docs/deployment.md) for detailed instructions.
+
+---
+
+## Service Management
+
+```bash
+./start.sh          # Start all services
+./start.sh stop     # Stop all services
+./start.sh restart  # Restart all services
+./start.sh status   # Check service status
+```
+
+Logs are written to `/tmp/aisguardian/`.
 
 ---
 
 ## Success Metrics (for Competition)
 
 1. **Working Demo**: Live map showing vessels and real-time alerts
-2. **At Least 3 Detection Types**: Dark events, geofence violations, plus one more
+2. **At Least 3 Detection Types**: Cable proximity, dark events, geofence violations
 3. **Compelling Visuals**: Screenshots/video of actual detections
-4. **Good Story**: Blog post explaining the build, the "Aiven + Ververica" angle
-5. **Social Engagement**: Twitter/LinkedIn posts documenting the journey
+4. **Good Story**: Blog post explaining the Baltic infrastructure angle
+5. **Cloud-Native**: Fully deployable with Aiven Kafka + Ververica Flink
 
 ---
 
@@ -363,13 +349,11 @@ To stay under 250 kb/s:
 
 ### AIS Data
 - AISStream docs: https://aisstream.io/documentation
-- AIS message types explained: https://gpsd.gitlab.io/gpsd/AIVDM.html
 - MMSI number format: https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity
 
-### Maritime Domain
-- Global Fishing Watch research: https://globalfishingwatch.org/research/
-- Sanctions evasion tactics: https://www.treasury.gov/ofac (advisories section)
-- IUU fishing overview: https://www.fao.org/iuu-fishing/en/
+### Maritime Infrastructure
+- Baltic undersea cables: https://www.submarinecablemap.com/
+- Nord Stream incidents: https://en.wikipedia.org/wiki/Nord_Stream_pipeline_sabotage
 
 ### Tech Stack Docs
 - Aiven Kafka: https://docs.aiven.io/docs/products/kafka
@@ -377,29 +361,3 @@ To stay under 250 kb/s:
 - Ververica Cloud: https://docs.ververica.com/
 - Mapbox GL JS: https://docs.mapbox.com/mapbox-gl-js/
 - Deck.gl: https://deck.gl/docs
-
----
-
-## Notes for Claude Code
-
-When implementing this project:
-
-1. **Start simple**: Get data flowing through Kafka before adding Flink complexity
-2. **Use Python for ingestion**: Faster iteration than Java for the connector piece
-3. **Flink jobs in Java**: Better tooling and Ververica Cloud support
-4. **Test with recorded data**: AISStream allows replay; save some data for offline testing
-5. **Geographic scope**: Start with a small bounding box (e.g., one sea) to manage throughput
-6. **Mock reference data first**: Start with a handful of test sanctions entries and simple geofences before loading full datasets
-
-### Code Style Preferences
-- Python: Use `asyncio` for the WebSocket client, type hints throughout
-- Java/Flink: Standard Maven project, use Flink's `StreamExecutionEnvironment`
-- React: Functional components, hooks, minimal dependencies
-- All: Comprehensive error handling, structured logging
-
-### Priority Order for MVP
-1. `ais_connector.py` (must have data first)
-2. Simple Flink enrichment job
-3. Geofence detector (simplest detection logic)
-4. Basic frontend with map
-5. Everything else is bonus

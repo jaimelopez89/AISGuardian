@@ -160,6 +160,64 @@ export function useAlerts(options = {}) {
 }
 
 /**
+ * Hook for fetching vessel trails (position history) from the backend API.
+ *
+ * @param {Object} options - Configuration options
+ * @returns {Object} - { trails, isLoading, error }
+ */
+export function useTrails(options = {}) {
+  const {
+    baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
+    pollInterval = 5000, // Less frequent than positions
+    enabled = true,
+  } = options
+
+  const [trails, setTrails] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const fetchTrails = useCallback(async () => {
+    if (!enabled) return
+
+    try {
+      setIsLoading(true)
+      const response = await fetch(`${baseUrl}/api/trails`)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch trails: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      setTrails(data.trails || [])
+      setError(null)
+
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [baseUrl, enabled])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    // Initial fetch
+    fetchTrails()
+
+    // Start polling
+    const interval = setInterval(fetchTrails, pollInterval)
+
+    return () => clearInterval(interval)
+  }, [fetchTrails, pollInterval, enabled])
+
+  return {
+    trails,
+    isLoading,
+    error,
+  }
+}
+
+/**
  * Legacy hook for backwards compatibility.
  * Now wraps useVesselPositions.
  */

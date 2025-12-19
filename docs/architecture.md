@@ -1,62 +1,77 @@
-# AIS Watchdog Architecture
+# AIS Guardian Architecture
 
 ## Overview
 
-AIS Watchdog is a real-time maritime anomaly detection system built on Apache Kafka and Apache Flink. It monitors Automatic Identification System (AIS) vessel data to detect potentially illegal activities.
+AIS Guardian is a real-time maritime anomaly detection system built on Aiven Kafka and Apache Flink. It monitors AIS vessel data in the Baltic Sea to detect potential threats to critical undersea infrastructure.
 
 ## System Architecture
 
 ```
-                                    ┌──────────────────────────────────────────┐
-                                    │           DETECTION LAYER                │
-                                    │         (Apache Flink)                   │
-┌─────────────┐    ┌───────────┐    │  ┌────────────────────────────────────┐  │    ┌───────────┐
-│ AISStream   │───▶│           │    │  │  Geofence Violation Detector      │  │    │           │
-│ WebSocket   │    │  ais-raw  │───▶│  │  Dark Event Detector              │──┼───▶│  alerts   │
-│   Feed      │    │   topic   │    │  │  Rendezvous Detector              │  │    │   topic   │
-└─────────────┘    │           │    │  │  Fishing Pattern Detector         │  │    │           │
-                   └───────────┘    │  └────────────────────────────────────┘  │    └─────┬─────┘
-                        │           └──────────────────────────────────────────┘          │
-                        │                              │                                   │
-┌─────────────┐    ┌────┴──────┐    ┌─────────────────┴───────────────────┐          ┌────┴──────┐
-│  Reference  │───▶│ reference │───▶│        BROADCAST STATE              │          │  React    │
-│    Data     │    │   -data   │    │  (Geofences, Sanctions Lists)       │          │ Frontend  │
-│  Loader     │    │   topic   │    └─────────────────────────────────────┘          │ + Mapbox  │
-└─────────────┘    └───────────┘                                                      └───────────┘
-
-                   ┌───────────┐
-                   │  vessel   │◀── Compacted topic for latest vessel state
-                   │  -state   │
-                   └───────────┘
+                                                    ┌──────────────────────────────────────────┐
+                                                    │           DETECTION LAYER                │
+                                                    │         (Apache Flink)                   │
+┌─────────────┐    ┌───────────────┐                │  ┌────────────────────────────────────┐  │    ┌───────────────┐
+│ AISStream   │───▶│               │                │  │  Cable Proximity Detector          │  │    │               │
+│ WebSocket   │    │   ais-raw     │───────────────▶│  │  Geofence Violation Detector       │──┼───▶│    alerts     │
+│   Feed      │    │   topic       │                │  │  Dark Event Detector               │  │    │    topic      │
+└─────────────┘    │               │                │  │  Rendezvous Detector               │  │    │               │
+                   └───────────────┘                │  │  Fishing Pattern Detector          │  │    └───────┬───────┘
+                                                    │  └────────────────────────────────────┘  │            │
+                                                    └──────────────────────────────────────────┘            │
+                                                                                                            │
+                   ┌───────────────┐    ┌────────────────────────────────────────┐                          │
+                   │  reference    │───▶│        BROADCAST STATE                 │                          │
+                   │    -data      │    │  (Geofences, Cables, Ports)            │                          │
+                   │   topic       │    └────────────────────────────────────────┘                          │
+                   └───────────────┘                                                                        │
+                                                                                                            │
+                                                                                                            │
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────┼───────┐
+│                                                                                                           │       │
+│   ┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐ │       │
+│   │                                    FastAPI Backend                                                  │ │       │
+│   │                                                                                                     │◀┘       │
+│   │   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │         │
+│   │   │  Vessel State   │    │  Alert Buffer   │    │  Trail History  │    │  REST Endpoints │         │         │
+│   │   │  (In-Memory)    │    │  (Last 500)     │    │  (Per Vessel)   │    │  /api/*         │         │         │
+│   │   └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘         │         │
+│   │                                                                                                     │         │
+│   └─────────────────────────────────────────────────────────────────────────────────────────────────────┘         │
+│                                                              │                                                     │
+│                                                              │                                                     │
+│                                                              ▼                                                     │
+│                                                    ┌─────────────────┐                                             │
+│                                                    │  React Frontend │                                             │
+│                                                    │  (Mapbox/Deck)  │                                             │
+│                                                    └─────────────────┘                                             │
+│                                                                                                                    │
+│   LOCAL SERVICES                                                                              AIVEN KAFKA (CLOUD)  │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Components
 
-### 1. Ingestion Layer (Python)
+### 1. AIS Ingestion Layer (Python)
 
-**ais_connector.py**
+**`ingestion/ais_connector.py`**
 - Connects to AISStream.io WebSocket API
+- Subscribes to Baltic Sea region (54°N-61°N, 12°E-31°E)
 - Normalizes different AIS message types (Position Reports, Static Data, Class B)
-- Produces to `ais-raw` Kafka topic
-- Rate limiting to stay under Aiven free tier (250 kb/s)
-- Geographic filtering via configurable bounding boxes
-
-**reference_loader.py**
-- Bootstraps reference data into Kafka
-- Loads sanctions lists (OFAC, EU)
-- Loads geofences (MPAs, EEZs, sanctioned waters)
-- Loads port positions for "in port" detection
+- Produces to `ais-raw` Kafka topic on Aiven
+- Rate limiting to stay under Aiven free tier (100 kb/s conservative limit)
+- GZIP compression for all messages
+- Automatic reconnection on connection loss
 
 ### 2. Stream Processing Layer (Java/Flink)
 
-**AISWatchdogJob.java**
+**`flink-jobs/src/main/java/com/aiswatchdog/AISWatchdogJob.java`**
 - Main Flink job entry point
-- Consumes from `ais-raw` and `reference-data` topics
-- Broadcasts geofences to all parallel instances
+- Consumes from `ais-raw` topic via SSL connection to Aiven Kafka
+- Broadcasts reference data (geofences, cables) to all parallel instances
 - Routes to multiple detectors in parallel
 - Unions all alerts and produces to `alerts` topic
 
-**Detectors:**
+**Detectors (11 total):**
 
 | Detector | Pattern | State Type |
 |----------|---------|------------|
@@ -64,58 +79,78 @@ AIS Watchdog is a real-time maritime anomaly detection system built on Apache Ka
 | DarkEventDetector | Time gap analysis | Keyed (per vessel) |
 | RendezvousDetector | Spatial proximity | Keyed (grid cells) |
 | FishingPatternDetector | Movement analysis | Keyed (per vessel) + Broadcast |
+| CableProximityDetector | Distance to cable routes | Keyed (per vessel) + Broadcast |
+| LoiteringDetector | Stationary analysis | Keyed (per vessel) |
+| AISSpoofingDetector | Data integrity check | Keyed (per vessel) |
+| ConvoyDetector | Formation detection | Keyed (grid cells) |
+| AnchorDraggingDetector | Movement while anchored | Keyed (per vessel) + Broadcast |
+| ShadowFleetDetector | Sanctions matching | Keyed (per vessel) + Broadcast (sanctions) |
+| VesselRiskScorer | Behavioral scoring | Keyed (per vessel) |
 
-### 3. Presentation Layer (React)
+See [DETECTORS.md](../flink-jobs/DETECTORS.md) for detailed documentation.
 
+### 3. Backend API Layer (Python/FastAPI)
+
+**`backend/api.py`**
+- FastAPI server consuming from Aiven Kafka topics
+- Background threads for Kafka consumers (vessels and alerts)
+- Maintains in-memory state:
+  - `vessel_state`: Latest position per MMSI
+  - `vessel_trails`: Last 50 positions per vessel for trail visualization
+  - `alerts_list`: Last 500 alerts
+- REST endpoints for frontend consumption
+- CORS enabled for local development
+
+### 4. Presentation Layer (React/Vite)
+
+**`frontend/`**
 - Real-time map with Mapbox GL + Deck.gl
+- Vessel markers with flag state identification (100+ countries)
+- Vessel trails for movement history
+- Cable protection zone overlays
 - Live alert feed with severity indicators
-- Vessel detail cards
-- Kafka REST Proxy integration for consuming topics
+- Vessel detail tooltips
 
 ## Data Flow
 
 ### AIS Message Flow
 
 ```
-1. AISStream WebSocket → ais_connector.py
+1. AISStream WebSocket → ingestion/ais_connector.py
 2. Normalize message → AISPosition JSON
-3. Produce to ais-raw topic (keyed by MMSI)
-4. Flink consumes, parses, filters valid positions
-5. Position broadcast to all detectors
+3. Produce to ais-raw topic on Aiven Kafka (SSL)
+4. Flink consumes from Aiven Kafka (SSL via KeyStores)
+5. Position routed to all detectors
 6. Each detector evaluates → Optional<Alert>
 7. Alerts produced to alerts topic
-8. Frontend polls alerts topic via REST Proxy
+8. Backend API consumes alerts topic
+9. Frontend polls /api/alerts endpoint
 ```
 
 ### Reference Data Flow
 
 ```
-1. reference_loader.py reads JSON/GeoJSON files
-2. Wraps with metadata (record_type, loaded_at)
-3. Produces to reference-data topic (compacted)
-4. Flink consumes from earliest offset
-5. Filters by record_type (geofence, sanction, port)
-6. Broadcasts to relevant detectors
+1. Geofence/cable GeoJSON files loaded at startup
+2. Broadcast to Flink detectors
+3. Used for point-in-polygon and distance calculations
 ```
 
-## Kafka Topics
+## Kafka Topics (Aiven)
 
 | Topic | Key | Cleanup | Purpose |
 |-------|-----|---------|---------|
-| `ais-raw` | MMSI | Delete (3 days) | Raw AIS positions |
-| `ais-enriched` | MMSI | Delete (3 days) | Processed positions for frontend |
-| `alerts` | MMSI | Delete (3 days) | Generated alerts |
-| `vessel-state` | MMSI | Compact | Latest state per vessel |
-| `reference-data` | entity_id | Compact | Geofences, sanctions, ports |
+| `ais-raw` | MMSI | Delete (3 days) | Raw AIS positions from ingestion |
+| `alerts` | MMSI | Delete (3 days) | Generated alerts from Flink |
+| `reference-data` | entity_id | Compact | Geofences, cables, ports (optional) |
 
 ## State Management
 
 ### Flink State Types
 
-**Broadcast State** (GeofenceViolationDetector, FishingPatternDetector)
-- Geofences broadcast to all parallel instances
+**Broadcast State** (GeofenceViolationDetector, CableProximityDetector)
+- Geofences and cable routes broadcast to all parallel instances
 - Each instance maintains full copy of all zones
-- Updates propagate automatically on new geofence messages
+- Updates propagate automatically on new reference messages
 
 **Keyed State** (DarkEventDetector, RendezvousDetector)
 - State partitioned by key (MMSI or grid cell)
@@ -125,59 +160,58 @@ AIS Watchdog is a real-time maritime anomaly detection system built on Apache Ka
 ### Processing Time Timers
 
 - DarkEventDetector uses timers to check for transmission gaps
-- Timers fire every 60 seconds per vessel
+- Timers fire periodically per vessel
 - Re-register timer on each position update
 
-## Detection Algorithms
+## API Endpoints
 
-### Geofence Violation
-```
-FOR each position:
-  FOR each geofence in broadcast state:
-    IF point-in-polygon(position, geofence):
-      IF should_alert(vessel_type, zone_type):
-        EMIT alert
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/vessels` | GET | All current vessel positions |
+| `/api/alerts` | GET | Recent alerts (limit param) |
+| `/api/trails` | GET | Vessel movement trails |
+| `/api/stats` | GET | System statistics |
+| `/api/vessel/{mmsi}` | GET | Single vessel details |
+| `/api/stream/vessels` | GET | SSE stream of vessel updates |
+| `/api/stream/alerts` | GET | SSE stream of new alerts |
 
-### Dark Event (Going Dark)
-```
-ON position update:
-  Update vessel state (last_seen, avg_interval)
-  Register timer for gap check
+## Security
 
-ON timer fire:
-  gap = now - last_seen
-  IF gap > threshold AND vessel was active:
-    EMIT alert
-```
+### Aiven Kafka SSL
 
-### Rendezvous Detection
-```
-Grid-based spatial partitioning:
-  key = floor(lat / 0.1) : floor(lon / 0.1)
+All connections to Aiven Kafka require SSL:
 
-ON position update:
-  IF in_open_sea AND speed < 5 knots:
-    FOR each other vessel in same/adjacent grid cells:
-      IF distance < 500m:
-        Update encounter duration
-        IF duration > 30 min:
-          EMIT alert
+**Python (confluent-kafka)**:
+```python
+config = {
+    'bootstrap.servers': 'kafka-xxx.aivencloud.com:12345',
+    'security.protocol': 'SSL',
+    'ssl.ca.location': './ca.pem',
+    'ssl.certificate.location': './service.cert',
+    'ssl.key.location': './service.key',
+}
 ```
 
-### Fishing Pattern Detection
+**Java (Flink)**:
+```java
+props.setProperty("security.protocol", "SSL");
+props.setProperty("ssl.truststore.location", "/path/to/truststore.jks");
+props.setProperty("ssl.truststore.password", "changeit");
+props.setProperty("ssl.keystore.location", "/path/to/keystore.p12");
+props.setProperty("ssl.keystore.password", "changeit");
 ```
-Maintain rolling window of recent positions per vessel
 
-Analyze:
-  - Average speed (< 5 knots typical for fishing)
-  - Speed variance (high = start/stop pattern)
-  - Course changes per hour (> 10 = working an area)
-  - Area covered (< 100 sq NM = concentrated)
+### SSL Certificate Conversion
 
-IF fishing_pattern AND in_protected_zone:
-  EMIT alert
+Aiven provides PEM certificates. Java requires JKS/PKCS12 keystores:
+
+```bash
+./scripts/setup-ssl.sh
 ```
+
+This creates:
+- `truststore.jks` - CA certificate for server verification
+- `keystore.p12` - Client certificate for authentication
 
 ## Scalability Considerations
 
@@ -185,16 +219,23 @@ IF fishing_pattern AND in_protected_zone:
 - 250 kb/s throughput (IN + OUT combined)
 - 5 topics, 2 partitions each
 - 3-day retention
+- No consumer groups limit
 
 ### Optimizations Applied
-- Geographic filtering at ingestion (bounding boxes)
-- Rate limiting (200 kb/s buffer)
+- Geographic filtering at ingestion (Baltic Sea only)
+- Rate limiting (100 kb/s conservative buffer)
 - GZIP compression for Kafka messages
 - Spatial partitioning for rendezvous detection
-- Caching parsed geometries
+- Caching parsed geometries in Flink
 
-### Future Scaling Path
-1. Increase Kafka partitions for higher parallelism
-2. Add more Flink task slots
-3. Shard reference data by region
-4. Use Flink's RocksDB state backend for large state
+### Deployment Scaling Options
+
+**Local Development:**
+- All services on single machine
+- Flink runs as embedded job
+
+**Production (Ververica Cloud):**
+- Flink deployed to managed cluster
+- Multiple task managers for parallelism
+- RocksDB state backend for large state
+- Automatic checkpointing and recovery
