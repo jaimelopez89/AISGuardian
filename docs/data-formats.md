@@ -115,7 +115,12 @@
 | `DARK_EVENT` | Vessel stopped transmitting AIS |
 | `RENDEZVOUS` | Ship-to-ship meeting detected |
 | `FISHING_IN_MPA` | Fishing activity in protected area |
-| `SANCTIONS_MATCH` | Vessel matches sanctions list |
+| `SANCTIONS_MATCH` | Vessel matches sanctions list or shadow fleet |
+| `AIS_SPOOFING` | Spoofed/manipulated AIS signal detected |
+| `CABLE_PROXIMITY` | Vessel near undersea cable infrastructure |
+| `LOITERING` | Vessel loitering in sensitive area |
+| `CONVOY` | Coordinated vessel group detected |
+| `ANCHOR_DRAGGING` | Vessel anchor may be dragging |
 
 **Severity Levels:**
 | Severity | Description |
@@ -170,9 +175,104 @@
 }
 ```
 
+*SANCTIONS_MATCH (Shadow Fleet):*
+```json
+{
+  "sanctioned_imo": "9384854",
+  "sanctioned_name": "EAGLE S",
+  "sanctions_authorities": ["EU", "UA"],
+  "risk_level": "critical",
+  "vessel_type": "tanker",
+  "match_type": "IMO_NUMBER",
+  "notes": "Investigated for Estlink cable sabotage"
+}
+```
+
+*SANCTIONS_MATCH (Risk Score):*
+```json
+{
+  "risk_score": 85,
+  "risk_tier": "CRITICAL",
+  "dark_event_count": 3,
+  "russian_port_visits": 2,
+  "sts_transfer_count": 1,
+  "high_risk_flag": true,
+  "name_change_count": 2,
+  "visited_russian_ports": ["St. Petersburg", "Ust-Luga"],
+  "alert_reason": "crossed into CRITICAL risk tier"
+}
+```
+
+*AIS_SPOOFING:*
+```json
+{
+  "reason": "IMO number changed - possible identity theft or spoofing",
+  "original_imo": "9299628",
+  "current_imo": "9384854",
+  "cumulative_spoofing_score": 60
+}
+```
+
 ---
 
-### 3. Reference Data (reference-data topic)
+### 3. Sanctions Data (sanctions topic)
+
+**Key:** `IMO:{imo_number}` or `FLAG:{mid_code}` (string)
+**Compaction:** Enabled
+
+#### Sanctioned Vessel Record
+
+```json
+{
+  "record_type": "SANCTIONED_VESSEL",
+  "imo_number": "9384854",
+  "vessel_name": "EAGLE S",
+  "vessel_type": "tanker",
+  "sanctions_authorities": ["EU", "UA", "OFAC"],
+  "risk_level": "critical",
+  "notes": "Investigated for Estlink cable sabotage Dec 2024",
+  "source": "shadow_fleet_database",
+  "loaded_at": "2025-01-15T12:00:00Z"
+}
+```
+
+#### High-Risk Flag Record
+
+```json
+{
+  "record_type": "HIGH_RISK_FLAG",
+  "mid_code": "273",
+  "country_code": "RU",
+  "country_name": "Russia",
+  "risk_level": "critical",
+  "reason": "Primary sanctions target",
+  "loaded_at": "2025-01-15T12:00:00Z"
+}
+```
+
+**Risk Levels:**
+| Level | Description |
+|-------|-------------|
+| `critical` | Sanctioned state (RU, IR, KP) or confirmed shadow fleet |
+| `high` | High probability shadow fleet or flag of convenience |
+| `medium` | Elevated risk, requires monitoring |
+
+**High-Risk MID Codes:**
+| MID | Country | Risk Level |
+|-----|---------|------------|
+| 273 | Russia | critical |
+| 422 | Iran | critical |
+| 445 | North Korea | critical |
+| 412-414 | China | high |
+| 477 | Hong Kong | high |
+| 620 | Cameroon | high |
+| 613 | Gabon | high |
+| 572 | Palau | high |
+| 667 | Sierra Leone | medium |
+
+---
+
+### 4. Reference Data (reference-data topic)
 
 **Key:** `{record_type}:{entity_id}` (string)
 
@@ -267,7 +367,7 @@
 
 ---
 
-### 4. Vessel State (vessel-state topic)
+### 5. Vessel State (vessel-state topic)
 
 **Key:** MMSI (string)
 **Compaction:** Enabled (keeps latest per key)

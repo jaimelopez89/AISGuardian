@@ -1,14 +1,20 @@
 package com.aiswatchdog;
 
+import com.aiswatchdog.detectors.AISSpoofingDetector;
+import com.aiswatchdog.detectors.AnchorDraggingDetector;
 import com.aiswatchdog.detectors.CableProximityDetector;
+import com.aiswatchdog.detectors.ConvoyDetector;
 import com.aiswatchdog.detectors.DarkEventDetector;
 import com.aiswatchdog.detectors.FishingPatternDetector;
 import com.aiswatchdog.detectors.GeofenceViolationDetector;
 import com.aiswatchdog.detectors.LoiteringDetector;
 import com.aiswatchdog.detectors.RendezvousDetector;
+import com.aiswatchdog.detectors.ShadowFleetDetector;
+import com.aiswatchdog.detectors.VesselRiskScorer;
 import com.aiswatchdog.models.AISPosition;
 import com.aiswatchdog.models.Alert;
 import com.aiswatchdog.models.Geofence;
+import com.aiswatchdog.models.SanctionedVessel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -66,6 +72,7 @@ public class AISWatchdogJob {
     // Kafka topics
     private static final String AIS_RAW_TOPIC = "ais-raw";
     private static final String REFERENCE_DATA_TOPIC = "reference-data";
+    private static final String SANCTIONS_TOPIC = "sanctions";
     private static final String ALERTS_TOPIC = "alerts";
     private static final String ENRICHED_TOPIC = "ais-enriched";
 
@@ -177,6 +184,31 @@ public class AISWatchdogJob {
         BroadcastStream<Geofence> broadcastGeofences = geofenceStream
                 .broadcast(GEOFENCE_STATE_DESCRIPTOR);
 
+        // ========== SOURCE: Sanctions Data (Shadow Fleet) ==========
+        KafkaSource<String> sanctionsSource = KafkaSource.<String>builder()
+                .setBootstrapServers(kafkaBootstrapServers)
+                .setTopics(SANCTIONS_TOPIC)
+                .setGroupId(kafkaGroupId + "-sanctions")
+                .setStartingOffsets(OffsetsInitializer.earliest())
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .setProperties(kafkaProps)
+                .build();
+
+        DataStream<String> sanctionsRawStream = env.fromSource(
+                sanctionsSource,
+                WatermarkStrategy.noWatermarks(),
+                "Sanctions Data Source"
+        );
+
+        // Parse sanctions records (sanctioned vessels and high-risk flags)
+        DataStream<SanctionedVessel> sanctionsStream = sanctionsRawStream
+                .map(json -> OBJECT_MAPPER.readValue(json, SanctionedVessel.class))
+                .name("Parse Sanctions Data");
+
+        // Broadcast sanctions to all parallel instances
+        BroadcastStream<SanctionedVessel> broadcastSanctions = sanctionsStream
+                .broadcast(ShadowFleetDetector.SANCTIONS_STATE_DESCRIPTOR);
+
         // ========== DETECTOR 1: Geofence Violations ==========
         SingleOutputStreamOperator<Alert> geofenceAlerts = aisPositions
                 .connect(broadcastGeofences)
@@ -218,9 +250,51 @@ public class AISWatchdogJob {
         // ========== DETECTOR 6: Loitering Detection ==========
         // Detects vessels staying in a small area for extended periods
         // Can indicate surveillance, illegal fishing, or preparation for ship-to-ship transfer
+        // Parameters: radiusNM=0.5, minDurationMinutes=45, maxHistoryMinutes=120, checkIntervalMs=60000
         SingleOutputStreamOperator<Alert> loiteringAlerts = keyedPositions
-                .process(new LoiteringDetector(0.5, 10, 60, 60000))
+                .process(new LoiteringDetector(0.5, 45, 120, 60000))
                 .name("Loitering Detector");
+
+        // ========== DETECTOR 7: AIS Spoofing Detection ==========
+        // Detects potentially spoofed AIS signals
+        // Checks for impossible positions, speeds, invalid MMSIs, and data inconsistencies
+        SingleOutputStreamOperator<Alert> spoofingAlerts = keyedPositions
+                .process(new AISSpoofingDetector(60000))
+                .name("AIS Spoofing Detector");
+
+        // ========== DETECTOR 8: Convoy Detection ==========
+        // Detects groups of vessels traveling together in coordinated fashion
+        // Parameters: 2 NM proximity, 3 kts speed tolerance, 20° course tolerance, 3 min vessels, 5 min duration
+        SingleOutputStreamOperator<Alert> convoyAlerts = aisPositions
+                .keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude()))
+                .connect(aisPositions.keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude())))
+                .process(new ConvoyDetector(2.0, 3.0, 20.0, 3, 5))
+                .name("Convoy Detector");
+
+        // ========== DETECTOR 9: Anchor Dragging Detection ==========
+        // Detects vessels whose anchors may be dragging
+        // Critical for undersea cable protection (C-Lion1, Balticconnector incidents)
+        SingleOutputStreamOperator<Alert> anchorDragAlerts = keyedPositions
+                .connect(broadcastGeofences)
+                .process(new AnchorDraggingDetector())
+                .name("Anchor Dragging Detector");
+
+        // ========== DETECTOR 10: Shadow Fleet Detection ==========
+        // Detects sanctioned vessels from Russia's shadow fleet
+        // Cross-references IMO numbers, high-risk flags, and vessel names
+        // against sanctions databases (Ukraine, EU, OFAC)
+        SingleOutputStreamOperator<Alert> shadowFleetAlerts = keyedPositions
+                .connect(broadcastSanctions)
+                .process(new ShadowFleetDetector())
+                .name("Shadow Fleet Detector");
+
+        // ========== DETECTOR 11: Vessel Risk Scoring ==========
+        // Calculates cumulative risk scores based on historical behavior
+        // Tracks: dark events, Russian port visits, STS transfers, high-risk flags
+        // Alerts when vessels cross risk thresholds
+        SingleOutputStreamOperator<Alert> riskScorerAlerts = keyedPositions
+                .process(new VesselRiskScorer(60000))
+                .name("Vessel Risk Scorer");
 
         // ========== UNION ALL ALERTS ==========
         DataStream<Alert> allAlerts = geofenceAlerts
@@ -228,7 +302,12 @@ public class AISWatchdogJob {
                 .union(rendezvousAlerts)
                 .union(fishingAlerts)
                 .union(cableAlerts)
-                .union(loiteringAlerts);
+                .union(loiteringAlerts)
+                .union(spoofingAlerts)
+                .union(convoyAlerts)
+                .union(anchorDragAlerts)
+                .union(shadowFleetAlerts)
+                .union(riskScorerAlerts);
 
         // ========== SINK: Alerts to Kafka ==========
         KafkaSink<String> alertsSink = KafkaSink.<String>builder()

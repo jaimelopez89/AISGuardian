@@ -22,7 +22,9 @@ public class Alert implements Serializable {
         SANCTIONS_MATCH,
         AIS_SPOOFING,
         CABLE_PROXIMITY,
-        LOITERING
+        LOITERING,
+        CONVOY,
+        ANCHOR_DRAGGING
     }
 
     public enum Severity {
@@ -190,6 +192,24 @@ public class Alert implements Serializable {
         return alert;
     }
 
+    public static Alert sanctionsMatch(AISPosition position, Severity severity,
+                                        String title, String description,
+                                        Map<String, Object> details) {
+        Alert alert = new Alert(AlertType.SANCTIONS_MATCH, severity, position.getMmsi());
+        alert.setVesselName(position.getShipName());
+        alert.setImoNumber(position.getImoNumber());
+        alert.setLatitude(position.getLatitude());
+        alert.setLongitude(position.getLongitude());
+        alert.setTitle(title);
+        alert.setDescription(description);
+        if (details != null) {
+            for (Map.Entry<String, Object> entry : details.entrySet()) {
+                alert.addDetail(entry.getKey(), entry.getValue());
+            }
+        }
+        return alert;
+    }
+
     public static Alert cableProximity(AISPosition position, String zoneName,
                                        Severity severity, String title,
                                        String description, Map<String, Object> details) {
@@ -212,6 +232,60 @@ public class Alert implements Serializable {
                                   String title, String description,
                                   Map<String, Object> details) {
         Alert alert = new Alert(AlertType.LOITERING, severity, position.getMmsi());
+        alert.setVesselName(position.getShipName());
+        alert.setImoNumber(position.getImoNumber());
+        alert.setLatitude(position.getLatitude());
+        alert.setLongitude(position.getLongitude());
+        alert.setTitle(title);
+        alert.setDescription(description);
+        if (details != null) {
+            for (Map.Entry<String, Object> entry : details.entrySet()) {
+                alert.addDetail(entry.getKey(), entry.getValue());
+            }
+        }
+        return alert;
+    }
+
+    public static Alert aisSpoofing(AISPosition position, Severity severity,
+                                    String title, String description,
+                                    Map<String, Object> details) {
+        Alert alert = new Alert(AlertType.AIS_SPOOFING, severity, position.getMmsi());
+        alert.setVesselName(position.getShipName());
+        alert.setImoNumber(position.getImoNumber());
+        alert.setLatitude(position.getLatitude());
+        alert.setLongitude(position.getLongitude());
+        alert.setTitle(title);
+        alert.setDescription(description);
+        if (details != null) {
+            for (Map.Entry<String, Object> entry : details.entrySet()) {
+                alert.addDetail(entry.getKey(), entry.getValue());
+            }
+        }
+        return alert;
+    }
+
+    public static Alert convoy(AISPosition leadVessel, Severity severity,
+                               String title, String description,
+                               Map<String, Object> details) {
+        Alert alert = new Alert(AlertType.CONVOY, severity, leadVessel.getMmsi());
+        alert.setVesselName(leadVessel.getShipName());
+        alert.setImoNumber(leadVessel.getImoNumber());
+        alert.setLatitude(leadVessel.getLatitude());
+        alert.setLongitude(leadVessel.getLongitude());
+        alert.setTitle(title);
+        alert.setDescription(description);
+        if (details != null) {
+            for (Map.Entry<String, Object> entry : details.entrySet()) {
+                alert.addDetail(entry.getKey(), entry.getValue());
+            }
+        }
+        return alert;
+    }
+
+    public static Alert anchorDragging(AISPosition position, Severity severity,
+                                       String title, String description,
+                                       Map<String, Object> details) {
+        Alert alert = new Alert(AlertType.ANCHOR_DRAGGING, severity, position.getMmsi());
         alert.setVesselName(position.getShipName());
         alert.setImoNumber(position.getImoNumber());
         alert.setLatitude(position.getLatitude());

@@ -4,9 +4,9 @@ Simple REST API backend that reads from Aiven Kafka and serves to frontend.
 Uses FastAPI with Server-Sent Events for real-time updates.
 """
 
-import asyncio
 import json
 import os
+import threading
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,7 +41,7 @@ vessel_state: Dict[str, dict] = {}
 vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=50))
 TRAIL_MAX_POINTS = 50  # Max trail points per vessel
 alerts_list: list = []
-MAX_ALERTS = 500
+MAX_ALERTS = 1000  # Max alerts to store in memory
 
 # Kafka consumer configuration
 def get_kafka_config(group_id: str) -> dict:
@@ -57,26 +57,38 @@ def get_kafka_config(group_id: str) -> dict:
     }
 
 
-async def consume_vessels():
-    """Background task to consume AIS positions from Kafka."""
+def consume_vessels_thread():
+    """Background thread to consume AIS positions from Kafka."""
     config = get_kafka_config('ais-guardian-api-vessels')
+    print(f"Vessel consumer config: bootstrap={config['bootstrap.servers']}, ca={config['ssl.ca.location']}", flush=True)
     consumer = Consumer(config)
-    consumer.subscribe(['ais-raw'])
 
-    print("Started vessel consumer")
+    def on_assign(c, partitions):
+        print(f"Vessel consumer assigned: {partitions}", flush=True)
+
+    consumer.subscribe(['ais-raw'], on_assign=on_assign)
+
+    print("Vessel consumer subscribed to ais-raw, waiting for partition assignment...", flush=True)
+    msg_count = 0
+    poll_count = 0
 
     while True:
         try:
-            msg = consumer.poll(0.1)
+            poll_count += 1
+            if poll_count <= 3 or poll_count % 30 == 0:
+                print(f"Vessel consumer poll #{poll_count}", flush=True)
+            msg = consumer.poll(1.0)
             if msg is None:
-                await asyncio.sleep(0.05)
                 continue
             if msg.error():
                 if msg.error().code() != KafkaError._PARTITION_EOF:
-                    print(f"Consumer error: {msg.error()}")
+                    print(f"Consumer error: {msg.error()}", flush=True)
                 continue
 
             data = json.loads(msg.value())
+            msg_count += 1
+            if msg_count % 100 == 0:
+                print(f"Vessel consumer: received {msg_count} messages, {len(vessel_state)} vessels", flush=True)
             mmsi = data.get('mmsi')
             if mmsi:
                 vessel_state[mmsi] = data
@@ -94,27 +106,27 @@ async def consume_vessels():
                         trail.append((lat, lon, ts))
 
         except Exception as e:
-            print(f"Error consuming vessel: {e}")
-            await asyncio.sleep(1)
+            print(f"Error consuming vessel: {e}", flush=True)
+            import time
+            time.sleep(1)
 
 
-async def consume_alerts():
-    """Background task to consume alerts from Kafka."""
+def consume_alerts_thread():
+    """Background thread to consume alerts from Kafka."""
     config = get_kafka_config('ais-guardian-api-alerts-v2')
     consumer = Consumer(config)
     consumer.subscribe(['alerts'])
 
-    print("Started alerts consumer")
+    print("Started alerts consumer thread", flush=True)
 
     while True:
         try:
-            msg = consumer.poll(0.1)
+            msg = consumer.poll(1.0)
             if msg is None:
-                await asyncio.sleep(0.05)
                 continue
             if msg.error():
                 if msg.error().code() != KafkaError._PARTITION_EOF:
-                    print(f"Consumer error: {msg.error()}")
+                    print(f"Alerts consumer error: {msg.error()}", flush=True)
                 continue
 
             data = json.loads(msg.value())
@@ -124,15 +136,21 @@ async def consume_alerts():
                 alerts_list.pop()
 
         except Exception as e:
-            print(f"Error consuming alert: {e}")
-            await asyncio.sleep(1)
+            print(f"Error consuming alert: {e}", flush=True)
+            import time
+            time.sleep(1)
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Start background Kafka consumers."""
-    asyncio.create_task(consume_vessels())
-    asyncio.create_task(consume_alerts())
+def startup_event():
+    """Start background Kafka consumer threads."""
+    # Start vessel consumer thread
+    vessel_thread = threading.Thread(target=consume_vessels_thread, daemon=True)
+    vessel_thread.start()
+
+    # Start alerts consumer thread
+    alerts_thread = threading.Thread(target=consume_alerts_thread, daemon=True)
+    alerts_thread.start()
 
 
 @app.get("/api/vessels")
@@ -161,7 +179,7 @@ async def get_vessels(
 
 
 @app.get("/api/alerts")
-async def get_alerts(limit: int = Query(100, le=500)):
+async def get_alerts(limit: int = Query(250, le=1000)):
     """Get recent alerts."""
     return {
         "alerts": alerts_list[:limit],

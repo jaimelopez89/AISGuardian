@@ -49,6 +49,112 @@ public class CableProximityDetector
             "IR"   // Iran
     ));
 
+    // Minimum distance from shore/anchorage to trigger stopped/slow alerts (NM)
+    // Increased to 2.5 NM to cover larger anchorage areas
+    private static final double MIN_SHORE_DISTANCE_NM = 2.5;
+
+    // Major Baltic ports and anchorages (lat, lon) - vessels near these are likely in legitimate anchorage
+    private static final double[][] BALTIC_PORTS_ANCHORAGES = {
+            // Finland - Gulf of Finland
+            {60.1587, 24.9500},  // Helsinki
+            {60.1400, 24.9800},  // Helsinki Anchorage East
+            {60.1300, 24.8500},  // Helsinki Anchorage West
+            {60.0800, 25.0500},  // Helsinki Outer Anchorage
+            {60.2833, 25.0333},  // Vuosaari (Helsinki container port)
+            {60.2550, 25.2000},  // Sipoo Bay anchorage
+            {60.4539, 22.2667},  // Turku
+            {61.4833, 21.8000},  // Rauma
+            {63.0833, 21.6167},  // Vaasa
+            {60.0969, 19.9347},  // Mariehamn (Åland)
+            {60.1000, 24.6000},  // Porkkala area
+            {60.0167, 24.3667},  // Inkoo
+            {60.4333, 27.1833},  // Kotka
+            {60.4667, 26.9500},  // Hamina
+            {60.2000, 25.5000},  // Porvoo offshore
+            // Estonia - Tallinn Bay and Gulf of Finland (EXPANDED)
+            {59.4500, 24.7500},  // Tallinn Old City Harbor
+            {59.4600, 24.7800},  // Tallinn Passenger Terminal
+            {59.4900, 24.9500},  // Muuga Harbor (major container port east of Tallinn)
+            {59.5000, 24.9800},  // Muuga Anchorage
+            {59.5100, 25.0200},  // Muuga Outer Anchorage
+            {59.4800, 24.8800},  // Tallinn Bay Eastern Anchorage
+            {59.4700, 24.8500},  // Tallinn Bay Central Anchorage
+            {59.4400, 24.8200},  // Tallinn Bay Southern Anchorage
+            {59.5200, 24.8000},  // Tallinn Bay Northern Anchorage
+            // Muuga Cargo Terminal (expanded coverage)
+            {59.4950, 24.9300},  // Muuga Container Terminal West
+            {59.4980, 24.9600},  // Muuga Container Terminal Central
+            {59.5020, 24.9900},  // Muuga Container Terminal East
+            {59.5050, 25.0100},  // Muuga Bulk Terminal
+            {59.4920, 24.9100},  // Muuga Oil Terminal
+            {59.4880, 24.9400},  // Muuga South Quay
+            {59.5080, 24.9700},  // Muuga North Anchorage
+            {59.3500, 24.0500},  // Paldiski North
+            {59.3300, 24.0800},  // Paldiski South
+            {59.4200, 24.6500},  // Kakumäe area
+            {59.5667, 25.4167},  // Kunda
+            {59.4833, 25.6000},  // Loksa
+            {59.3800, 27.7500},  // Sillamäe
+            {59.4500, 28.0500},  // Narva-Jõesuu
+            // Western Estonia - Rohuküla and Haapsalu
+            {58.9050, 23.4200},  // Rohuküla Ferry Terminal
+            {58.9100, 23.4400},  // Rohuküla Harbor
+            {58.9000, 23.4000},  // Rohuküla Anchorage
+            {58.9433, 23.5417},  // Haapsalu
+            {58.9500, 23.5000},  // Haapsalu Bay
+            {58.8000, 23.4500},  // Vormsi Island Ferry
+            // Pärnu Bay
+            {58.3833, 24.5000},  // Pärnu Harbor
+            {58.4000, 24.4500},  // Pärnu Anchorage
+            // Saaremaa & Hiiumaa
+            {58.2500, 22.5000},  // Kuressaare
+            {58.8667, 22.9333},  // Kärdla (Hiiumaa)
+            {58.5833, 23.3833},  // Virtsu Ferry Terminal
+            {58.3833, 26.7167},  // Tartu area
+            // Sweden
+            {59.3293, 18.0686},  // Stockholm
+            {57.7089, 11.9746},  // Gothenburg
+            {55.6000, 13.0000},  // Malmö
+            {56.1612, 15.5869},  // Karlskrona
+            {56.6667, 16.3667},  // Kalmar
+            {57.2667, 16.4667},  // Oskarshamn
+            {60.6749, 17.1413},  // Gävle
+            {58.7500, 17.8333},  // Nynäshamn
+            // Latvia
+            {56.9496, 24.1052},  // Riga
+            {56.5000, 21.0000},  // Liepāja
+            {57.4000, 21.5500},  // Ventspils
+            // Lithuania
+            {55.7172, 21.1175},  // Klaipėda
+            // Poland
+            {54.3520, 18.6466},  // Gdańsk
+            {54.5189, 18.5305},  // Gdynia
+            {53.4285, 14.5528},  // Szczecin
+            // Germany
+            {54.3233, 10.1394},  // Kiel
+            {53.8667, 10.6833},  // Lübeck
+            {54.0833, 12.1333},  // Rostock
+            {54.1833, 12.0833},  // Warnemünde
+            {54.3150, 13.0900},  // Stralsund Hafeninsel
+            {54.3100, 13.1000},  // Stralsund Harbor
+            {54.3200, 13.0800},  // Stralsund Anchorage
+            {54.5100, 13.6400},  // Sassnitz (Rügen)
+            {54.4333, 13.1833},  // Greifswald
+            // Denmark
+            {55.6761, 12.5683},  // Copenhagen
+            {55.4667, 8.4500},   // Esbjerg
+            {57.0500, 9.9167},   // Frederikshavn
+            {56.1500, 10.2167},  // Aarhus
+            // Russia (Baltic)
+            {59.9343, 30.3351},  // St. Petersburg
+            {54.7104, 20.4522},  // Kaliningrad
+            {59.9833, 29.7667},  // Kronstadt
+            {59.8667, 29.1333},  // Ust-Luga
+            {60.7000, 28.7500},  // Vyborg
+            // Norway (near Baltic entrance)
+            {59.9139, 10.7522},  // Oslo
+    };
+
     // Cache for parsed geometries
     private final Map<String, Geometry> geometryCache = new HashMap<>();
 
@@ -117,12 +223,49 @@ public class CableProximityDetector
     }
 
     /**
+     * Check if position is near any known port or anchorage.
+     * Returns true if within MIN_SHORE_DISTANCE_NM of any port.
+     */
+    private boolean isNearPortOrAnchorage(double lat, double lon) {
+        for (double[] port : BALTIC_PORTS_ANCHORAGES) {
+            double distNM = distanceNM(lat, lon, port[0], port[1]);
+            if (distNM < MIN_SHORE_DISTANCE_NM) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Calculate distance between two points in nautical miles using Haversine formula.
+     */
+    private double distanceNM(double lat1, double lon1, double lat2, double lon2) {
+        double R = 3440.065; // Earth radius in nautical miles
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    /**
      * Assess the threat level of a vessel in a cable zone.
      */
     private Alert assessThreat(AISPosition position, Geofence zone) {
         double speed = position.getSpeedOverGround() != null ? position.getSpeedOverGround() : 0;
         Integer shipType = position.getShipType();
         String flagState = extractFlagState(position.getMmsi());
+
+        // Skip stopped/slow alerts if vessel is near a port or anchorage
+        boolean nearPort = isNearPortOrAnchorage(position.getLatitude(), position.getLongitude());
+        if (nearPort && speed < SLOW_SPEED_THRESHOLD) {
+            // Vessel is near port/anchorage and moving slowly - this is normal behavior
+            LOG.debug("Skipping alert for {} - near port/anchorage at ({}, {})",
+                    position.getMmsi(), position.getLatitude(), position.getLongitude());
+            return null;
+        }
 
         Alert.Severity severity;
         String title;

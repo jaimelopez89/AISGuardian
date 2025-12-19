@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import MapGL, { NavigationControl, ScaleControl } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
 import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer } from '@deck.gl/layers'
@@ -44,14 +44,30 @@ export default function Map({
   alerts = [],
   trails = [],
   ports = [],
+  cables = [],
   selectedVessel,
   onVesselClick,
   mapboxToken,
   showTrails = true,
   showPorts = true,
+  showCables = true,
+  flyTo = null,  // { latitude, longitude, zoom? } - fly to this location
 }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE)
   const [hoverInfo, setHoverInfo] = useState(null)
+
+  // Handle flyTo prop changes - animate to new location
+  useEffect(() => {
+    if (flyTo && flyTo.latitude && flyTo.longitude) {
+      setViewState(prev => ({
+        ...prev,
+        latitude: flyTo.latitude,
+        longitude: flyTo.longitude,
+        zoom: flyTo.zoom || 10,
+        transitionDuration: 1000,
+      }))
+    }
+  }, [flyTo])
 
   // Pre-generate icon URLs for vessel types
   const vesselIcons = useMemo(() => {
@@ -66,10 +82,12 @@ export default function Map({
 
   // Cable protection zone layers - filled polygons with animated borders
   const cableZoneLayers = useMemo(() => {
+    if (!showCables || cables.length === 0) return []
+
     // Fill layer
     const fillLayer = new PolygonLayer({
       id: 'cable-zones-fill',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: true,
       stroked: false,
       filled: true,
@@ -88,7 +106,7 @@ export default function Map({
     // Border layer with glow effect
     const borderLayer = new PathLayer({
       id: 'cable-zones-border',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: false,
       widthUnits: 'pixels',
       widthScale: 1,
@@ -101,7 +119,7 @@ export default function Map({
     // Outer glow for critical zones
     const glowLayer = new PathLayer({
       id: 'cable-zones-glow',
-      data: BALTIC_CABLE_GEOFENCES.filter(z => z.severity === 'CRITICAL'),
+      data: cables.filter(z => z.severity === 'CRITICAL'),
       pickable: false,
       widthUnits: 'pixels',
       widthScale: 1,
@@ -111,15 +129,15 @@ export default function Map({
     })
 
     return [glowLayer, fillLayer, borderLayer]
-  }, [hoverInfo])
+  }, [cables, showCables, hoverInfo])
 
   // Cable zone labels
   const cableLabelLayer = useMemo(() => {
-    if (viewState.zoom < 6) return null
+    if (!showCables || cables.length === 0 || viewState.zoom < 6) return null
 
     return new TextLayer({
       id: 'cable-labels',
-      data: BALTIC_CABLE_GEOFENCES,
+      data: cables,
       pickable: false,
       getPosition: d => {
         // Get centroid of polygon
@@ -138,7 +156,7 @@ export default function Map({
       outlineWidth: 2,
       outlineColor: [15, 23, 42, 255],
     })
-  }, [viewState.zoom])
+  }, [cables, showCables, viewState.zoom])
 
   // Vessel layer - arrows showing heading direction
   const vesselLayer = useMemo(() => new ScatterplotLayer({

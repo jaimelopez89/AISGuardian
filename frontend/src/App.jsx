@@ -4,8 +4,8 @@ import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
 import { useVesselPositions, useAlerts, useTrails } from './hooks/useKafkaStream'
-import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route } from 'lucide-react'
-import { getVesselCategory, BALTIC_PORTS } from './utils/geo'
+import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route, Cable, Filter, Wifi, Fuel, Zap } from 'lucide-react'
+import { getVesselCategory, BALTIC_PORTS, BALTIC_CABLE_GEOFENCES } from './utils/geo'
 
 // Get Mapbox token from environment
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
@@ -23,6 +23,25 @@ const VESSEL_TYPES = [
 // All vessel type keys for initial state
 const ALL_VESSEL_TYPES = new Set(VESSEL_TYPES.map(t => t.key))
 
+// Speed filter categories
+const SPEED_FILTERS = [
+  { key: 'stopped', label: 'Stopped', range: [0, 0.5], color: 'bg-red-500' },
+  { key: 'slow', label: 'Slow (<3 kts)', range: [0.5, 3], color: 'bg-yellow-500' },
+  { key: 'normal', label: 'Normal', range: [3, 15], color: 'bg-green-500' },
+  { key: 'fast', label: 'Fast (>15 kts)', range: [15, 999], color: 'bg-blue-500' },
+]
+
+const ALL_SPEED_FILTERS = new Set(SPEED_FILTERS.map(s => s.key))
+
+// Infrastructure types for filtering
+const INFRASTRUCTURE_TYPES = [
+  { key: 'telecommunications', label: 'Data Cables', icon: Wifi, color: 'text-blue-400' },
+  { key: 'gas_pipeline', label: 'Gas Pipelines', icon: Fuel, color: 'text-red-400' },
+  { key: 'power', label: 'Power Cables', icon: Zap, color: 'text-yellow-400' },
+]
+
+const ALL_INFRASTRUCTURE_TYPES = new Set(INFRASTRUCTURE_TYPES.map(t => t.key))
+
 /**
  * Main application component.
  */
@@ -30,6 +49,7 @@ export default function App() {
   const [selectedVessel, setSelectedVessel] = useState(null)
   const [selectedAlert, setSelectedAlert] = useState(null)
   const [rightPanel, setRightPanel] = useState('alerts') // 'alerts' | 'stats' | 'vessels'
+  const [flyTo, setFlyTo] = useState(null) // { latitude, longitude, zoom } for map animation
 
   // Map filtering state
   const [enabledVesselTypes, setEnabledVesselTypes] = useState(new Set(ALL_VESSEL_TYPES))
@@ -39,6 +59,16 @@ export default function App() {
   // Map layer visibility
   const [showTrails, setShowTrails] = useState(true)
   const [showPorts, setShowPorts] = useState(true)
+  const [showCables, setShowCables] = useState(true)
+
+  // Infrastructure type filter
+  const [enabledInfraTypes, setEnabledInfraTypes] = useState(new Set(ALL_INFRASTRUCTURE_TYPES))
+
+  // Speed filter state
+  const [enabledSpeedFilters, setEnabledSpeedFilters] = useState(new Set(ALL_SPEED_FILTERS))
+
+  // Flagged states filter
+  const [showOnlyFlagged, setShowOnlyFlagged] = useState(false)
 
   // Toggle a vessel type on/off
   const toggleVesselType = useCallback((typeKey) => {
@@ -61,6 +91,47 @@ export default function App() {
   const selectNoTypes = useCallback(() => {
     setEnabledVesselTypes(new Set())
   }, [])
+
+  // Toggle a speed filter on/off
+  const toggleSpeedFilter = useCallback((speedKey) => {
+    setEnabledSpeedFilters(prev => {
+      const next = new Set(prev)
+      if (next.has(speedKey)) {
+        next.delete(speedKey)
+      } else {
+        next.add(speedKey)
+      }
+      return next
+    })
+  }, [])
+
+  // Toggle an infrastructure type on/off
+  const toggleInfraType = useCallback((typeKey) => {
+    setEnabledInfraTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(typeKey)) {
+        next.delete(typeKey)
+      } else {
+        next.add(typeKey)
+      }
+      return next
+    })
+  }, [])
+
+  // Select all/none infrastructure types
+  const selectAllInfraTypes = useCallback(() => {
+    setEnabledInfraTypes(new Set(ALL_INFRASTRUCTURE_TYPES))
+  }, [])
+
+  const selectNoInfraTypes = useCallback(() => {
+    setEnabledInfraTypes(new Set())
+  }, [])
+
+  // Filter cables based on enabled infrastructure types
+  const displayCables = useMemo(() => {
+    if (!showCables) return []
+    return BALTIC_CABLE_GEOFENCES.filter(cable => enabledInfraTypes.has(cable.type))
+  }, [showCables, enabledInfraTypes])
 
   // Connect to Kafka streams
   const {
@@ -105,9 +176,18 @@ export default function App() {
     if (vessel) {
       setSelectedVessel(vessel)
     }
+    // Fly to the alert location
+    if (alert.latitude && alert.longitude) {
+      setFlyTo({
+        latitude: alert.latitude,
+        longitude: alert.longitude,
+        zoom: 10,
+        timestamp: Date.now(), // Force re-trigger even for same location
+      })
+    }
   }, [vessels])
 
-  // Filter vessels based on type and alerts-only mode
+  // Filter vessels based on type, speed, alerts, and flagged states
   const displayVessels = useMemo(() => {
     let filtered = vessels
 
@@ -115,9 +195,19 @@ export default function App() {
     if (enabledVesselTypes.size < ALL_VESSEL_TYPES.size) {
       filtered = filtered.filter(v => {
         const category = getVesselCategory(v.ship_type)
-        // Map 'unknown' to 'other' for filtering purposes
         const filterKey = category === 'unknown' ? 'other' : category
         return enabledVesselTypes.has(filterKey)
+      })
+    }
+
+    // Filter by speed category
+    if (enabledSpeedFilters.size < ALL_SPEED_FILTERS.size) {
+      filtered = filtered.filter(v => {
+        const speed = v.speed_over_ground ?? -1
+        if (speed < 0) return enabledSpeedFilters.has('stopped') // No speed data treated as stopped
+        return SPEED_FILTERS.some(sf =>
+          enabledSpeedFilters.has(sf.key) && speed >= sf.range[0] && speed < sf.range[1]
+        )
       })
     }
 
@@ -127,8 +217,17 @@ export default function App() {
       filtered = filtered.filter(v => alertMmsis.has(v.mmsi))
     }
 
+    // Filter to only show flagged/monitored states
+    if (showOnlyFlagged) {
+      const flaggedMids = ['273', '412', '413', '414', '477', '445', '422'] // RU, CN, HK, KP, IR
+      filtered = filtered.filter(v => {
+        const mid = v.mmsi?.substring(0, 3)
+        return flaggedMids.includes(mid)
+      })
+    }
+
     return filtered
-  }, [vessels, enabledVesselTypes, showOnlyAlerts, alerts])
+  }, [vessels, enabledVesselTypes, enabledSpeedFilters, showOnlyAlerts, showOnlyFlagged, alerts])
 
   const displayAlerts = useMemo(() => {
     if (alerts.length > 0) return alerts
@@ -177,16 +276,19 @@ export default function App() {
             alerts={displayAlerts}
             trails={trails}
             ports={BALTIC_PORTS}
+            cables={displayCables}
             selectedVessel={selectedVessel}
             onVesselClick={handleVesselClick}
             mapboxToken={MAPBOX_TOKEN}
             showTrails={showTrails}
             showPorts={showPorts}
+            showCables={showCables}
+            flyTo={flyTo}
           />
 
-          {/* Selected Vessel Card */}
+          {/* Selected Vessel Card - top left, max height to avoid overlap */}
           {selectedVessel && (
-            <div className="absolute top-4 left-4 z-10">
+            <div className="absolute top-4 left-4 z-10 max-h-[calc(100%-120px)] overflow-auto">
               <VesselCard
                 vessel={selectedVessel}
                 alerts={displayAlerts}
@@ -195,8 +297,8 @@ export default function App() {
             </div>
           )}
 
-          {/* Map Controls */}
-          <div className="absolute bottom-4 left-4 z-10">
+          {/* Map Controls - bottom right to avoid overlap with vessel card */}
+          <div className="absolute bottom-4 right-[400px] z-10">
             <button
               onClick={() => setShowMapControls(!showMapControls)}
               className={`p-3 rounded-lg shadow-lg transition-colors ${
@@ -208,7 +310,7 @@ export default function App() {
             </button>
 
             {showMapControls && (
-              <div className="absolute bottom-14 left-0 glass-panel p-4 w-64 space-y-4">
+              <div className="absolute bottom-14 right-0 glass-panel p-4 w-64 space-y-4 max-h-[70vh] overflow-y-auto">
                 <div className="text-sm font-medium text-white">Map Layers</div>
 
                 {/* Trails Toggle */}
@@ -238,6 +340,68 @@ export default function App() {
                     {showPorts ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
                 </div>
+
+                {/* Infrastructure Section */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Cable className="w-4 h-4 text-maritime-400" />
+                    <span className="text-sm text-maritime-300">Infrastructure</span>
+                  </div>
+                  <button
+                    onClick={() => setShowCables(!showCables)}
+                    className={`p-1.5 rounded ${showCables ? 'bg-blue-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                  >
+                    {showCables ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Infrastructure Type Filter */}
+                {showCables && (
+                  <div className="ml-6 mt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-maritime-400">Type</span>
+                      <div className="flex gap-2 text-xs">
+                        <button
+                          onClick={selectAllInfraTypes}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          All
+                        </button>
+                        <span className="text-maritime-600">|</span>
+                        <button
+                          onClick={selectNoInfraTypes}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          None
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {INFRASTRUCTURE_TYPES.map(infra => {
+                        const Icon = infra.icon
+                        const count = BALTIC_CABLE_GEOFENCES.filter(c => c.type === infra.key).length
+                        return (
+                          <label
+                            key={infra.key}
+                            className="flex items-center gap-2 cursor-pointer hover:bg-maritime-800/50 p-1 rounded"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={enabledInfraTypes.has(infra.key)}
+                              onChange={() => toggleInfraType(infra.key)}
+                              className="rounded border-maritime-600 bg-maritime-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <Icon className={`w-4 h-4 ${infra.color}`} />
+                            <span className={`text-sm flex-1 ${enabledInfraTypes.has(infra.key) ? 'text-white' : 'text-maritime-500'}`}>
+                              {infra.label}
+                            </span>
+                            <span className="text-xs text-maritime-500">{count}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="border-t border-maritime-700 pt-3">
                   <div className="text-sm font-medium text-white mb-3">Vessel Filters</div>
@@ -292,6 +456,66 @@ export default function App() {
                         </span>
                       </label>
                     ))}
+                  </div>
+                </div>
+
+                {/* Speed Filter */}
+                <div className="pt-3 border-t border-maritime-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-maritime-400">Speed</span>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        onClick={() => setEnabledSpeedFilters(new Set(ALL_SPEED_FILTERS))}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        All
+                      </button>
+                      <span className="text-maritime-600">|</span>
+                      <button
+                        onClick={() => setEnabledSpeedFilters(new Set())}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        None
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {SPEED_FILTERS.map(sf => (
+                      <label
+                        key={sf.key}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-maritime-800/50 p-1 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={enabledSpeedFilters.has(sf.key)}
+                          onChange={() => toggleSpeedFilter(sf.key)}
+                          className="rounded border-maritime-600 bg-maritime-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                        />
+                        <span className={`w-3 h-3 rounded-full ${sf.color}`} />
+                        <span className={`text-sm ${enabledSpeedFilters.has(sf.key) ? 'text-white' : 'text-maritime-500'}`}>
+                          {sf.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Flagged States Filter */}
+                <div className="pt-3 border-t border-maritime-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-alert-high" />
+                      <span className="text-sm text-maritime-300">Monitored States Only</span>
+                    </div>
+                    <button
+                      onClick={() => setShowOnlyFlagged(!showOnlyFlagged)}
+                      className={`p-1.5 rounded ${showOnlyFlagged ? 'bg-alert-high text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                    >
+                      {showOnlyFlagged ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <div className="text-xs text-maritime-500 mt-1">
+                    RU, CN, HK, KP, IR vessels
                   </div>
                 </div>
 
@@ -351,6 +575,7 @@ export default function App() {
               <AlertFeed
                 alerts={displayAlerts}
                 onAlertClick={handleAlertClick}
+                selectedAlert={selectedAlert}
               />
             )}
             {rightPanel === 'stats' && (
