@@ -350,19 +350,12 @@ export default function Map({
       }
     },
     onClick: info => {
-      if (info.object) {
-        // Call onAlertClick to select the alert
-        if (onAlertClick) {
-          onAlertClick(info.object)
-        }
-        // Also find and select the vessel associated with this alert
-        const alertVessel = vessels.find(v => v.mmsi === info.object.mmsi)
-        if (alertVessel && onVesselClick) {
-          onVesselClick(alertVessel)
-        }
+      if (info.object && onAlertClick) {
+        // onAlertClick (handleAlertClick) already handles setting both alert and vessel
+        onAlertClick(info.object)
       }
     },
-  }), [alerts, hoverInfo, onAlertClick, onVesselClick, vessels])
+  }), [alerts, hoverInfo, onAlertClick])
 
   // Vessel name labels for larger zoom levels
   const labelLayer = useMemo(() => {
@@ -395,8 +388,8 @@ export default function Map({
     portsLayer,
     portLabelLayer,
     trailsLayer,
-    vesselLayer,
-    alertLayer,
+    alertLayer,      // Alert circles below vessels
+    vesselLayer,     // Vessel icons on top - get click priority
     labelLayer,
   ].filter(Boolean)
 
