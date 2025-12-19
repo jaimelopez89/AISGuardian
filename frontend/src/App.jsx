@@ -162,11 +162,26 @@ export default function App() {
   const isConnected = vesselsConnected || alertsConnected
   const messagesPerSecond = vesselStats.messagesPerSecond + alertStats.messagesPerSecond
 
-  // Handle vessel selection
+  // Handle vessel selection - also find and show any alerts for this vessel
   const handleVesselClick = useCallback((vessel) => {
     setSelectedVessel(vessel)
-    setSelectedAlert(null)
-  }, [])
+    // Find if this vessel has any alerts and select the most recent one
+    const vesselAlerts = alerts.filter(a => a.mmsi === vessel.mmsi)
+    if (vesselAlerts.length > 0) {
+      setSelectedAlert(vesselAlerts[0]) // Most recent alert
+    } else {
+      setSelectedAlert(null)
+    }
+    // Fly to vessel location
+    if (vessel.latitude && vessel.longitude) {
+      setFlyTo({
+        latitude: vessel.latitude,
+        longitude: vessel.longitude,
+        zoom: 10,
+        timestamp: Date.now(),
+      })
+    }
+  }, [alerts])
 
   // Handle alert click - zoom to location and select vessel
   const handleAlertClick = useCallback((alert) => {
@@ -292,7 +307,12 @@ export default function App() {
               <VesselCard
                 vessel={selectedVessel}
                 alerts={displayAlerts}
-                onClose={() => setSelectedVessel(null)}
+                selectedAlert={selectedAlert}
+                onClose={() => {
+                  setSelectedVessel(null)
+                  setSelectedAlert(null)
+                }}
+                onAlertClick={handleAlertClick}
               />
             </div>
           )}
