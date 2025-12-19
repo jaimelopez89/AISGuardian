@@ -294,6 +294,7 @@ export default function App() {
             cables={displayCables}
             selectedVessel={selectedVessel}
             onVesselClick={handleVesselClick}
+            onAlertClick={handleAlertClick}
             mapboxToken={MAPBOX_TOKEN}
             showTrails={showTrails}
             showPorts={showPorts}

@@ -335,7 +335,7 @@ const MID_TO_COUNTRY = {
  */
 export function getFlagState(mmsi) {
   if (!mmsi || mmsi.length < 3) {
-    return { code: 'XX', name: 'Unknown', flag: '🏴', flagged: false }
+    return { code: 'XX', name: 'Unknown', flag: '', flagged: false }
   }
 
   const mid = mmsi.substring(0, 3)
@@ -351,7 +351,8 @@ export function getFlagState(mmsi) {
     }
   }
 
-  return { code: mid, name: `MID ${mid}`, flag: '🏴', flagged: false, mid }
+  // Unknown flag state - return empty flag instead of black flag
+  return { code: mid, name: `MID ${mid}`, flag: '', flagged: false, mid }
 }
 
 /**

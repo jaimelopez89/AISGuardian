@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import MapGL, { NavigationControl, ScaleControl } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
-import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer } from '@deck.gl/layers'
+import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer, IconLayer } from '@deck.gl/layers'
 import {
   getVesselColor,
   getAlertColor,
@@ -47,6 +47,7 @@ export default function Map({
   cables = [],
   selectedVessel,
   onVesselClick,
+  onAlertClick,  // New prop for alert click handling
   mapboxToken,
   showTrails = true,
   showPorts = true,
@@ -158,59 +159,81 @@ export default function Map({
     })
   }, [cables, showCables, viewState.zoom])
 
-  // Vessel layer - arrows showing heading direction
-  const vesselLayer = useMemo(() => new ScatterplotLayer({
+  // Create arrow icon data URL with specified color
+  const createArrowIcon = useCallback((fillColor, strokeColor = 'rgba(255,255,255,0.9)', strokeWidth = 1.5) => {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <path d="M16 4 L24 26 L16 20 L8 26 Z" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+      </svg>
+    `
+    return `data:image/svg+xml;base64,${btoa(svg)}`
+  }, [])
+
+  // Pre-generate icon URLs for different vessel states
+  const vesselIconAtlas = useMemo(() => {
+    const icons = {}
+    // Standard vessel type colors
+    const types = [
+      { key: 'tanker', color: 'rgb(249, 115, 22)' },
+      { key: 'cargo', color: 'rgb(139, 92, 246)' },
+      { key: 'fishing', color: 'rgb(34, 197, 94)' },
+      { key: 'passenger', color: 'rgb(59, 130, 246)' },
+      { key: 'special', color: 'rgb(234, 179, 8)' },
+      { key: 'other', color: 'rgb(107, 114, 128)' },
+      { key: 'flagged', color: 'rgb(239, 68, 68)' },
+      { key: 'selected', color: 'rgb(255, 255, 255)' },
+    ]
+    types.forEach(t => {
+      const stroke = t.key === 'selected' ? 'rgb(59, 130, 246)' : 'rgba(255,255,255,0.9)'
+      const strokeWidth = t.key === 'selected' || t.key === 'flagged' ? 2 : 1.5
+      icons[t.key] = createArrowIcon(t.color, stroke, strokeWidth)
+    })
+    return icons
+  }, [createArrowIcon])
+
+  // Get icon key for vessel
+  const getVesselIconKey = useCallback((vessel) => {
+    if (selectedVessel && vessel.mmsi === selectedVessel.mmsi) return 'selected'
+    const flagState = getFlagState(vessel.mmsi)
+    if (flagState.flagged) return 'flagged'
+
+    const shipType = vessel.ship_type
+    if (shipType >= 80 && shipType <= 89) return 'tanker'
+    if (shipType >= 70 && shipType <= 79) return 'cargo'
+    if (shipType >= 30 && shipType <= 37) return 'fishing'
+    if (shipType >= 60 && shipType <= 69) return 'passenger'
+    if (shipType >= 50 && shipType <= 59) return 'special'
+    return 'other'
+  }, [selectedVessel])
+
+  // Vessel layer - arrow icons showing heading direction
+  const vesselLayer = useMemo(() => new IconLayer({
     id: 'vessels',
     data: vessels,
     pickable: true,
-    opacity: 1,
-    stroked: true,
-    filled: true,
-    radiusScale: 1,
-    radiusMinPixels: 6,
-    radiusMaxPixels: 24,
-    lineWidthMinPixels: 1,
     getPosition: d => [d.longitude, d.latitude],
-    getRadius: d => {
-      // Size based on vessel length or default
-      const length = d.dimension_a && d.dimension_b
-        ? d.dimension_a + d.dimension_b
-        : 100
-      return Math.max(60, length)
-    },
-    getFillColor: d => {
+    getIcon: d => ({
+      url: vesselIconAtlas[getVesselIconKey(d)],
+      width: 32,
+      height: 32,
+      anchorY: 16,
+      anchorX: 16,
+    }),
+    getSize: d => {
+      if (selectedVessel && d.mmsi === selectedVessel.mmsi) return 28
       const flagState = getFlagState(d.mmsi)
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) {
-        return [255, 255, 255, 255] // White for selected
-      }
-      // Highlight flagged states with a red tint
-      if (flagState.flagged) {
-        return [239, 68, 68, 230] // Red for flagged states
-      }
-      return [...getVesselColor(d.ship_type), 220]
+      if (flagState.flagged) return 24
+      return 20
     },
-    getLineColor: d => {
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) {
-        return [59, 130, 246, 255] // Blue border for selected
-      }
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) {
-        return [255, 255, 255, 255] // White border for flagged
-      }
-      return [255, 255, 255, 120]
-    },
-    getLineWidth: d => {
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) return 3
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) return 2
-      return 1
-    },
-    // Custom rendering to show heading direction
-    // Using angle parameter to rotate the point
     getAngle: d => {
+      // Rotate arrow to point in direction of travel
       const heading = d.heading ?? d.course_over_ground ?? 0
-      return 360 - heading // Invert for correct rotation direction
+      return 360 - heading // Invert for correct rotation
     },
+    sizeScale: 1,
+    sizeUnits: 'pixels',
+    sizeMinPixels: 12,
+    sizeMaxPixels: 36,
     onHover: info => {
       if (info.object) {
         setHoverInfo({ ...info, isVessel: true })
@@ -224,43 +247,11 @@ export default function Map({
       }
     },
     updateTriggers: {
-      getFillColor: [selectedVessel?.mmsi],
-      getLineColor: [selectedVessel?.mmsi],
-      getLineWidth: [selectedVessel?.mmsi],
+      getIcon: [selectedVessel?.mmsi],
+      getSize: [selectedVessel?.mmsi],
     },
-  }), [vessels, selectedVessel, onVesselClick, hoverInfo])
+  }), [vessels, selectedVessel, onVesselClick, hoverInfo, vesselIconAtlas, getVesselIconKey])
 
-  // Heading indicator arrows (triangular shape showing direction)
-  const headingLayer = useMemo(() => new ScatterplotLayer({
-    id: 'vessel-headings',
-    data: vessels.filter(v => v.speed_over_ground > 0.5), // Only show for moving vessels
-    pickable: false,
-    opacity: 1,
-    stroked: false,
-    filled: true,
-    radiusScale: 1,
-    radiusMinPixels: 3,
-    radiusMaxPixels: 10,
-    getPosition: d => {
-      // Offset position in direction of heading
-      const heading = d.heading ?? d.course_over_ground ?? 0
-      const headingRad = (heading * Math.PI) / 180
-      const speed = d.speed_over_ground || 1
-      const offset = 0.008 * Math.min(speed / 10, 1.5) // Scale offset by speed
-      return [
-        d.longitude + Math.sin(headingRad) * offset,
-        d.latitude + Math.cos(headingRad) * offset,
-      ]
-    },
-    getRadius: 25,
-    getFillColor: d => {
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) {
-        return [239, 68, 68, 200]
-      }
-      return [...getVesselColor(d.ship_type), 180]
-    },
-  }), [vessels])
 
   // Vessel trails layer - shows recent position history as fading lines
   const trailsLayer = useMemo(() => {
@@ -358,7 +349,20 @@ export default function Map({
         setHoverInfo(null)
       }
     },
-  }), [alerts, hoverInfo])
+    onClick: info => {
+      if (info.object) {
+        // Call onAlertClick to select the alert
+        if (onAlertClick) {
+          onAlertClick(info.object)
+        }
+        // Also find and select the vessel associated with this alert
+        const alertVessel = vessels.find(v => v.mmsi === info.object.mmsi)
+        if (alertVessel && onVesselClick) {
+          onVesselClick(alertVessel)
+        }
+      }
+    },
+  }), [alerts, hoverInfo, onAlertClick, onVesselClick, vessels])
 
   // Vessel name labels for larger zoom levels
   const labelLayer = useMemo(() => {
@@ -392,7 +396,6 @@ export default function Map({
     portLabelLayer,
     trailsLayer,
     vesselLayer,
-    headingLayer,
     alertLayer,
     labelLayer,
   ].filter(Boolean)
