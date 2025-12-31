@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import MapGL, { NavigationControl, ScaleControl } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
-import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer } from '@deck.gl/layers'
+import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer, IconLayer } from '@deck.gl/layers'
 import {
   getVesselColor,
   getAlertColor,
@@ -47,11 +47,13 @@ export default function Map({
   cables = [],
   selectedVessel,
   onVesselClick,
+  onAlertClick,  // New prop for alert click handling
   mapboxToken,
   showTrails = true,
   showPorts = true,
   showCables = true,
   flyTo = null,  // { latitude, longitude, zoom? } - fly to this location
+  investigationTrack = null,  // Historical track for investigation mode
 }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE)
   const [hoverInfo, setHoverInfo] = useState(null)
@@ -158,59 +160,81 @@ export default function Map({
     })
   }, [cables, showCables, viewState.zoom])
 
-  // Vessel layer - arrows showing heading direction
-  const vesselLayer = useMemo(() => new ScatterplotLayer({
+  // Create arrow icon data URL with specified color
+  const createArrowIcon = useCallback((fillColor, strokeColor = 'rgba(255,255,255,0.9)', strokeWidth = 1.5) => {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <path d="M16 4 L24 26 L16 20 L8 26 Z" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+      </svg>
+    `
+    return `data:image/svg+xml;base64,${btoa(svg)}`
+  }, [])
+
+  // Pre-generate icon URLs for different vessel states
+  const vesselIconAtlas = useMemo(() => {
+    const icons = {}
+    // Standard vessel type colors
+    const types = [
+      { key: 'tanker', color: 'rgb(249, 115, 22)' },
+      { key: 'cargo', color: 'rgb(139, 92, 246)' },
+      { key: 'fishing', color: 'rgb(34, 197, 94)' },
+      { key: 'passenger', color: 'rgb(59, 130, 246)' },
+      { key: 'special', color: 'rgb(234, 179, 8)' },
+      { key: 'other', color: 'rgb(107, 114, 128)' },
+      { key: 'flagged', color: 'rgb(239, 68, 68)' },
+      { key: 'selected', color: 'rgb(255, 255, 255)' },
+    ]
+    types.forEach(t => {
+      const stroke = t.key === 'selected' ? 'rgb(59, 130, 246)' : 'rgba(255,255,255,0.9)'
+      const strokeWidth = t.key === 'selected' || t.key === 'flagged' ? 2 : 1.5
+      icons[t.key] = createArrowIcon(t.color, stroke, strokeWidth)
+    })
+    return icons
+  }, [createArrowIcon])
+
+  // Get icon key for vessel
+  const getVesselIconKey = useCallback((vessel) => {
+    if (selectedVessel && vessel.mmsi === selectedVessel.mmsi) return 'selected'
+    const flagState = getFlagState(vessel.mmsi)
+    if (flagState.flagged) return 'flagged'
+
+    const shipType = vessel.ship_type
+    if (shipType >= 80 && shipType <= 89) return 'tanker'
+    if (shipType >= 70 && shipType <= 79) return 'cargo'
+    if (shipType >= 30 && shipType <= 37) return 'fishing'
+    if (shipType >= 60 && shipType <= 69) return 'passenger'
+    if (shipType >= 50 && shipType <= 59) return 'special'
+    return 'other'
+  }, [selectedVessel])
+
+  // Vessel layer - arrow icons showing heading direction
+  const vesselLayer = useMemo(() => new IconLayer({
     id: 'vessels',
     data: vessels,
     pickable: true,
-    opacity: 1,
-    stroked: true,
-    filled: true,
-    radiusScale: 1,
-    radiusMinPixels: 6,
-    radiusMaxPixels: 24,
-    lineWidthMinPixels: 1,
     getPosition: d => [d.longitude, d.latitude],
-    getRadius: d => {
-      // Size based on vessel length or default
-      const length = d.dimension_a && d.dimension_b
-        ? d.dimension_a + d.dimension_b
-        : 100
-      return Math.max(60, length)
-    },
-    getFillColor: d => {
+    getIcon: d => ({
+      url: vesselIconAtlas[getVesselIconKey(d)],
+      width: 32,
+      height: 32,
+      anchorY: 16,
+      anchorX: 16,
+    }),
+    getSize: d => {
+      if (selectedVessel && d.mmsi === selectedVessel.mmsi) return 28
       const flagState = getFlagState(d.mmsi)
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) {
-        return [255, 255, 255, 255] // White for selected
-      }
-      // Highlight flagged states with a red tint
-      if (flagState.flagged) {
-        return [239, 68, 68, 230] // Red for flagged states
-      }
-      return [...getVesselColor(d.ship_type), 220]
+      if (flagState.flagged) return 24
+      return 20
     },
-    getLineColor: d => {
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) {
-        return [59, 130, 246, 255] // Blue border for selected
-      }
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) {
-        return [255, 255, 255, 255] // White border for flagged
-      }
-      return [255, 255, 255, 120]
-    },
-    getLineWidth: d => {
-      if (selectedVessel && d.mmsi === selectedVessel.mmsi) return 3
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) return 2
-      return 1
-    },
-    // Custom rendering to show heading direction
-    // Using angle parameter to rotate the point
     getAngle: d => {
+      // Rotate arrow to point in direction of travel
       const heading = d.heading ?? d.course_over_ground ?? 0
-      return 360 - heading // Invert for correct rotation direction
+      return 360 - heading // Invert for correct rotation
     },
+    sizeScale: 1,
+    sizeUnits: 'pixels',
+    sizeMinPixels: 12,
+    sizeMaxPixels: 36,
     onHover: info => {
       if (info.object) {
         setHoverInfo({ ...info, isVessel: true })
@@ -224,43 +248,11 @@ export default function Map({
       }
     },
     updateTriggers: {
-      getFillColor: [selectedVessel?.mmsi],
-      getLineColor: [selectedVessel?.mmsi],
-      getLineWidth: [selectedVessel?.mmsi],
+      getIcon: [selectedVessel?.mmsi],
+      getSize: [selectedVessel?.mmsi],
     },
-  }), [vessels, selectedVessel, onVesselClick, hoverInfo])
+  }), [vessels, selectedVessel, onVesselClick, hoverInfo, vesselIconAtlas, getVesselIconKey])
 
-  // Heading indicator arrows (triangular shape showing direction)
-  const headingLayer = useMemo(() => new ScatterplotLayer({
-    id: 'vessel-headings',
-    data: vessels.filter(v => v.speed_over_ground > 0.5), // Only show for moving vessels
-    pickable: false,
-    opacity: 1,
-    stroked: false,
-    filled: true,
-    radiusScale: 1,
-    radiusMinPixels: 3,
-    radiusMaxPixels: 10,
-    getPosition: d => {
-      // Offset position in direction of heading
-      const heading = d.heading ?? d.course_over_ground ?? 0
-      const headingRad = (heading * Math.PI) / 180
-      const speed = d.speed_over_ground || 1
-      const offset = 0.008 * Math.min(speed / 10, 1.5) // Scale offset by speed
-      return [
-        d.longitude + Math.sin(headingRad) * offset,
-        d.latitude + Math.cos(headingRad) * offset,
-      ]
-    },
-    getRadius: 25,
-    getFillColor: d => {
-      const flagState = getFlagState(d.mmsi)
-      if (flagState.flagged) {
-        return [239, 68, 68, 200]
-      }
-      return [...getVesselColor(d.ship_type), 180]
-    },
-  }), [vessels])
 
   // Vessel trails layer - shows recent position history as fading lines
   const trailsLayer = useMemo(() => {
@@ -286,6 +278,115 @@ export default function Map({
       getWidth: 2,
     })
   }, [trails, showTrails])
+
+  // Investigation track layers - shows historical track with waypoints
+  const investigationLayers = useMemo(() => {
+    if (!investigationTrack) return []
+
+    const layers = []
+
+    // Track line - gradient from green (normal speed) to red (slow/alert)
+    const trackLine = new PathLayer({
+      id: 'investigation-track-line',
+      data: [{
+        path: investigationTrack.coordinates,
+      }],
+      pickable: false,
+      widthUnits: 'pixels',
+      widthScale: 1,
+      widthMinPixels: 3,
+      widthMaxPixels: 6,
+      capRounded: true,
+      jointRounded: true,
+      getPath: d => d.path,
+      getColor: [236, 72, 153, 200], // Pink for investigation
+      getWidth: 4,
+    })
+    layers.push(trackLine)
+
+    // Outer glow for track
+    const trackGlow = new PathLayer({
+      id: 'investigation-track-glow',
+      data: [{
+        path: investigationTrack.coordinates,
+      }],
+      pickable: false,
+      widthUnits: 'pixels',
+      getPath: d => d.path,
+      getColor: [236, 72, 153, 60], // Pink glow
+      getWidth: 12,
+    })
+    layers.push(trackGlow)
+
+    // Waypoint markers - colored by status/alert
+    const getWaypointColor = (wp) => {
+      if (wp.alert === 'ANCHOR_DRAG_SUSPECTED' || wp.alert === 'ANCHOR_DRAG') {
+        return [239, 68, 68, 255] // Red for anchor drag
+      }
+      if (wp.alert === 'CABLE_PROXIMITY_CRITICAL' || wp.alert === 'CABLE_DAMAGE_LIKELY') {
+        return [249, 115, 22, 255] // Orange for cable critical
+      }
+      if (wp.alert === 'CABLE_PROXIMITY') {
+        return [234, 179, 8, 255] // Yellow for cable proximity
+      }
+      if (wp.speed < 4) {
+        return [239, 68, 68, 255] // Red for slow/stopped
+      }
+      if (wp.speed < 8) {
+        return [234, 179, 8, 255] // Yellow for slowing
+      }
+      return [34, 197, 94, 255] // Green for normal speed
+    }
+
+    const waypointMarkers = new ScatterplotLayer({
+      id: 'investigation-waypoints',
+      data: investigationTrack.waypoints,
+      pickable: true,
+      opacity: 1,
+      stroked: true,
+      filled: true,
+      radiusScale: 1,
+      radiusMinPixels: 5,
+      radiusMaxPixels: 12,
+      lineWidthMinPixels: 2,
+      getPosition: d => [d.lon, d.lat],
+      getRadius: d => d.alert ? 8 : 5,
+      getFillColor: d => getWaypointColor(d),
+      getLineColor: [255, 255, 255, 200],
+      onHover: info => {
+        if (info.object) {
+          setHoverInfo({ ...info, isInvestigationWaypoint: true })
+        } else if (hoverInfo?.isInvestigationWaypoint) {
+          setHoverInfo(null)
+        }
+      },
+    })
+    layers.push(waypointMarkers)
+
+    // Alert waypoint labels (only at higher zoom)
+    if (viewState.zoom >= 7) {
+      const alertWaypoints = investigationTrack.waypoints.filter(wp => wp.alert)
+      const waypointLabels = new TextLayer({
+        id: 'investigation-waypoint-labels',
+        data: alertWaypoints,
+        pickable: false,
+        getPosition: d => [d.lon, d.lat],
+        getText: d => d.alert.replace(/_/g, ' '),
+        getSize: 10,
+        getColor: [255, 255, 255, 255],
+        getTextAnchor: 'start',
+        getAlignmentBaseline: 'center',
+        getPixelOffset: [12, 0],
+        fontFamily: 'Monaco, monospace',
+        fontWeight: 'bold',
+        outlineWidth: 2,
+        outlineColor: [15, 23, 42, 255],
+      })
+      layers.push(waypointLabels)
+    }
+
+    return layers
+  }, [investigationTrack, viewState.zoom, hoverInfo])
 
   // Ports layer - shows port boundaries
   const portsLayer = useMemo(() => {
@@ -358,7 +459,13 @@ export default function Map({
         setHoverInfo(null)
       }
     },
-  }), [alerts, hoverInfo])
+    onClick: info => {
+      if (info.object && onAlertClick) {
+        // onAlertClick (handleAlertClick) already handles setting both alert and vessel
+        onAlertClick(info.object)
+      }
+    },
+  }), [alerts, hoverInfo, onAlertClick])
 
   // Vessel name labels for larger zoom levels
   const labelLayer = useMemo(() => {
@@ -391,9 +498,9 @@ export default function Map({
     portsLayer,
     portLabelLayer,
     trailsLayer,
-    vesselLayer,
-    headingLayer,
-    alertLayer,
+    ...investigationLayers,  // Investigation track below alerts
+    alertLayer,      // Alert circles below vessels
+    vesselLayer,     // Vessel icons on top - get click priority
     labelLayer,
   ].filter(Boolean)
 
@@ -466,6 +573,55 @@ export default function Map({
             <div className="text-slate-300 text-xs leading-relaxed">
               {object.description?.slice(0, 120)}...
             </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Investigation waypoint tooltip
+    if (hoverInfo.isInvestigationWaypoint) {
+      const time = new Date(object.timestamp).toLocaleString()
+      const alertClass = object.alert
+        ? (object.alert.includes('ANCHOR') ? 'text-red-400' : 'text-orange-400')
+        : (object.speed < 4 ? 'text-red-400' : object.speed < 8 ? 'text-amber-400' : 'text-green-400')
+      return (
+        <div
+          className="absolute pointer-events-none z-50"
+          style={{ left: x + 15, top: y + 15 }}
+        >
+          <div className="bg-slate-900/95 backdrop-blur-sm border border-pink-600/50 rounded-lg p-3 shadow-2xl min-w-[220px]">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🔍</span>
+              <div>
+                <div className="font-bold text-pink-400 text-sm">FITBURG Investigation</div>
+                <div className="text-slate-400 text-xs">{time}</div>
+              </div>
+            </div>
+
+            <div className="text-slate-300 text-xs mb-2">{object.location}</div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs border-t border-slate-700 pt-2">
+              <div className="text-slate-500">Speed</div>
+              <div className={`font-mono ${alertClass}`}>{object.speed} kts</div>
+
+              <div className="text-slate-500">Position</div>
+              <div className="text-slate-200 font-mono text-[10px]">
+                {object.lat.toFixed(4)}°N, {object.lon.toFixed(4)}°E
+              </div>
+
+              <div className="text-slate-500">Status</div>
+              <div className="text-slate-200">{object.status}</div>
+            </div>
+
+            {object.alert && (
+              <div className={`mt-2 px-2 py-1 rounded text-xs font-medium ${
+                object.alert.includes('ANCHOR')
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+              }`}>
+                {object.alert.replace(/_/g, ' ')}
+              </div>
+            )}
           </div>
         </div>
       )

@@ -8,11 +8,15 @@
       "OFAC (US Treasury)",
       "UK FCDO"
     ],
-    "last_updated": "2025-12-19",
-    "total_vessels": 200,
+    "last_updated": "2025-12-31",
+    "total_vessels": 204,
     "note": "IMO numbers are primary identifiers. MMSI lookup required for real-time matching."
   },
   "vessels": [
+    {"imo": "9250397", "mmsi": "375068000", "name": "FITBURG", "flag": "VC", "type": "cargo", "sanctions": [], "risk_level": "critical", "notes": "SUSPECT #1 - Elisa FEC cable sabotage Dec 31, 2025. ANCHOR DRAG CONFIRMED. Track shows 74% speed reduction through cable zone. Departed St. Petersburg Dec 30. Currently anchored Ingå. ISM: SARFO DENIZCILIK (Turkey)."},
+    {"imo": "9186245", "mmsi": "667002491", "name": "INDRI", "flag": "SL", "type": "cargo", "sanctions": [], "risk_level": "critical", "notes": "SUSPECT #2 - Elisa FEC investigation Dec 31, 2025. 9 track points over cable route. Multiple CRITICAL alerts. Sierra Leone flag of convenience. Transited cable zone 03:00-04:30 UTC. Currently anchored 59.76°N 24.80°E."},
+    {"imo": "9328471", "mmsi": "636020388", "name": "COLD STREAM", "flag": "LR", "type": "tanker", "sanctions": [], "risk_level": "high", "notes": "SUSPECT #3 - Elisa FEC investigation Dec 31, 2025. Track crossed cable route at slow speed. 2 CRITICAL alerts. Liberia flag. Last port: Ust-Luga (Russia). Currently anchored near Tallinn 59.49°N 24.59°E."},
+    {"imo": "9412856", "mmsi": "371089000", "name": "ZHENG ZHI", "flag": "PA", "type": "cargo", "sanctions": [], "risk_level": "high", "notes": "SUSPECT #4 - Elisa FEC investigation Dec 31, 2025. 13 transits through incident zone in 48h. Panama flag. Chinese-named vessel. Erratic navigation pattern. Currently anchored 59.74°N 24.54°E."},
     {"imo": "9255244", "name": "WHITE CONDOR I", "type": "tanker", "sanctions": ["UA"], "risk_level": "high"},
     {"imo": "9283306", "name": "FINA A", "type": "tanker", "sanctions": ["UA"], "risk_level": "high"},
     {"imo": "9683726", "name": "DMITRY POKROVSKY", "type": "tanker", "sanctions": ["UA", "EU"], "risk_level": "critical"},

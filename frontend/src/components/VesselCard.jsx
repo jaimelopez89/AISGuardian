@@ -25,12 +25,15 @@ import {
 /**
  * Vessel detail card shown when a vessel is selected.
  */
-export default function VesselCard({ vessel, onClose, alerts = [] }) {
+export default function VesselCard({ vessel, onClose, alerts = [], selectedAlert = null, onAlertClick }) {
   if (!vessel) return null
 
   const category = getVesselCategory(vessel.ship_type)
   const vesselAlerts = alerts.filter(a => a.mmsi === vessel.mmsi)
   const flagState = getFlagState(vessel.mmsi)
+
+  // If there's a selected alert for this vessel, show it prominently
+  const activeAlert = selectedAlert && selectedAlert.mmsi === vessel.mmsi ? selectedAlert : null
 
   return (
     <div className="glass-panel w-80 max-h-[80vh] overflow-hidden flex flex-col">
@@ -42,6 +45,144 @@ export default function VesselCard({ vessel, onClose, alerts = [] }) {
             <span className="text-red-200 text-xs font-medium uppercase tracking-wide">
               Monitored Flag State
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Active Alert Detail - shown when an alert is selected */}
+      {activeAlert && (
+        <div className={`p-4 border-b-2 ${
+          activeAlert.severity === 'CRITICAL' ? 'bg-red-950/90 border-red-500' :
+          activeAlert.severity === 'HIGH' ? 'bg-orange-950/90 border-orange-500' :
+          activeAlert.severity === 'MEDIUM' ? 'bg-amber-950/90 border-amber-500' :
+          'bg-green-950/90 border-green-500'
+        }`}>
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${
+              activeAlert.severity === 'CRITICAL' ? 'text-red-400' :
+              activeAlert.severity === 'HIGH' ? 'text-orange-400' :
+              activeAlert.severity === 'MEDIUM' ? 'text-amber-400' :
+              'text-green-400'
+            }`} />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                  activeAlert.severity === 'CRITICAL' ? 'bg-red-500/30 text-red-300' :
+                  activeAlert.severity === 'HIGH' ? 'bg-orange-500/30 text-orange-300' :
+                  activeAlert.severity === 'MEDIUM' ? 'bg-amber-500/30 text-amber-300' :
+                  'bg-green-500/30 text-green-300'
+                }`}>
+                  {activeAlert.severity}
+                </span>
+                <span className="text-xs text-maritime-400">
+                  {activeAlert.detected_at && formatDistanceToNow(new Date(activeAlert.detected_at), { addSuffix: true })}
+                </span>
+              </div>
+              <div className="font-semibold text-white text-sm mb-1">
+                {activeAlert.title}
+              </div>
+              <div className="text-sm text-maritime-200 leading-relaxed">
+                {activeAlert.description}
+              </div>
+
+              {/* Alert Details */}
+              {activeAlert.details && Object.keys(activeAlert.details).length > 0 && (
+                <div className="mt-3 p-2 bg-black/30 rounded text-xs space-y-1">
+                  {activeAlert.details.cable_name && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Cable:</span>
+                      <span className="text-white font-medium">{activeAlert.details.cable_name}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.zone_name && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Zone:</span>
+                      <span className="text-white font-medium">{activeAlert.details.zone_name}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.vessel_speed !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Speed:</span>
+                      <span className="text-white font-medium">{activeAlert.details.vessel_speed?.toFixed(1)} kts</span>
+                    </div>
+                  )}
+                  {activeAlert.details.distance_meters !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Distance:</span>
+                      <span className="text-white font-medium">{activeAlert.details.distance_meters}m</span>
+                    </div>
+                  )}
+                  {activeAlert.details.gap_minutes !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Gap Duration:</span>
+                      <span className="text-white font-medium">{activeAlert.details.gap_minutes} min</span>
+                    </div>
+                  )}
+                  {activeAlert.details.drift_distance_m !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Drift:</span>
+                      <span className="text-white font-medium">{activeAlert.details.drift_distance_m}m</span>
+                    </div>
+                  )}
+                  {activeAlert.details.loiter_duration_minutes !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Duration:</span>
+                      <span className="text-white font-medium">{activeAlert.details.loiter_duration_minutes} min</span>
+                    </div>
+                  )}
+                  {activeAlert.details.risk_factor && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Risk Factor:</span>
+                      <span className="text-yellow-400 font-medium">{activeAlert.details.risk_factor}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.flag_state && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Flag:</span>
+                      <span className="text-white font-medium">{activeAlert.details.flag_state}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.sanctioned_name && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Sanctioned As:</span>
+                      <span className="text-red-400 font-medium">{activeAlert.details.sanctioned_name}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.sanctions_authorities && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Sanctions:</span>
+                      <span className="text-red-400 font-medium">
+                        {Array.isArray(activeAlert.details.sanctions_authorities)
+                          ? activeAlert.details.sanctions_authorities.join(', ')
+                          : activeAlert.details.sanctions_authorities}
+                      </span>
+                    </div>
+                  )}
+                  {activeAlert.details.risk_score !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-maritime-400">Risk Score:</span>
+                      <span className={`font-medium ${
+                        activeAlert.details.risk_score >= 75 ? 'text-red-400' :
+                        activeAlert.details.risk_score >= 50 ? 'text-orange-400' :
+                        activeAlert.details.risk_score >= 25 ? 'text-yellow-400' : 'text-green-400'
+                      }`}>{activeAlert.details.risk_score}/100</span>
+                    </div>
+                  )}
+                  {activeAlert.details.reason && (
+                    <div className="mt-1 pt-1 border-t border-maritime-700">
+                      <span className="text-maritime-400">Reason: </span>
+                      <span className="text-white">{activeAlert.details.reason}</span>
+                    </div>
+                  )}
+                  {activeAlert.details.notes && (
+                    <div className="mt-1 pt-1 border-t border-maritime-700">
+                      <span className="text-maritime-400">Notes: </span>
+                      <span className="text-white">{activeAlert.details.notes}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -180,22 +321,44 @@ export default function VesselCard({ vessel, onClose, alerts = [] }) {
 
         {/* Recent Alerts */}
         {vesselAlerts.length > 0 && (
-          <Section title="Recent Alerts">
+          <Section title={`Recent Alerts (${vesselAlerts.length})`}>
             <div className="space-y-2">
-              {vesselAlerts.slice(0, 5).map((alert, i) => (
-                <div
-                  key={alert.alert_id || i}
-                  className={`p-2 rounded border-l-2 bg-maritime-800/50 border-l-alert-${alert.severity?.toLowerCase()}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className={`w-3 h-3 text-alert-${alert.severity?.toLowerCase()}`} />
-                    <span className="text-sm text-white">{alert.title}</span>
+              {vesselAlerts.slice(0, 5).map((alert, i) => {
+                const isActive = activeAlert && (activeAlert.alert_id === alert.alert_id ||
+                  (activeAlert.mmsi === alert.mmsi && activeAlert.detected_at === alert.detected_at))
+                return (
+                  <div
+                    key={alert.alert_id || i}
+                    onClick={() => onAlertClick?.(alert)}
+                    className={`p-2 rounded border-l-2 cursor-pointer transition-all ${
+                      isActive
+                        ? 'bg-maritime-700 ring-1 ring-blue-500/50'
+                        : 'bg-maritime-800/50 hover:bg-maritime-700/50'
+                    } ${
+                      alert.severity === 'CRITICAL' ? 'border-l-red-500' :
+                      alert.severity === 'HIGH' ? 'border-l-orange-500' :
+                      alert.severity === 'MEDIUM' ? 'border-l-amber-500' :
+                      'border-l-green-500'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className={`w-3 h-3 ${
+                        alert.severity === 'CRITICAL' ? 'text-red-400' :
+                        alert.severity === 'HIGH' ? 'text-orange-400' :
+                        alert.severity === 'MEDIUM' ? 'text-amber-400' :
+                        'text-green-400'
+                      }`} />
+                      <span className="text-sm text-white flex-1 truncate">{alert.title}</span>
+                      {isActive && (
+                        <span className="text-xs text-blue-400">Selected</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-maritime-400 mt-1">
+                      {alert.detected_at && formatDistanceToNow(new Date(alert.detected_at), { addSuffix: true })}
+                    </div>
                   </div>
-                  <div className="text-xs text-maritime-400 mt-1">
-                    {alert.detected_at && formatDistanceToNow(new Date(alert.detected_at), { addSuffix: true })}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </Section>
         )}

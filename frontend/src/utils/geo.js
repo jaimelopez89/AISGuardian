@@ -335,7 +335,7 @@ const MID_TO_COUNTRY = {
  */
 export function getFlagState(mmsi) {
   if (!mmsi || mmsi.length < 3) {
-    return { code: 'XX', name: 'Unknown', flag: '🏴', flagged: false }
+    return { code: 'XX', name: 'Unknown', flag: '', flagged: false }
   }
 
   const mid = mmsi.substring(0, 3)
@@ -351,7 +351,8 @@ export function getFlagState(mmsi) {
     }
   }
 
-  return { code: mid, name: `MID ${mid}`, flag: '🏴', flagged: false, mid }
+  // Unknown flag state - return empty flag instead of black flag
+  return { code: mid, name: `MID ${mid}`, flag: '', flagged: false, mid }
 }
 
 /**
@@ -490,6 +491,42 @@ export const BALTIC_CABLE_GEOFENCES = [
       [12.0, 55.3], [12.5, 55.0], [13.5, 54.5], [14.5, 54.2], [15.0, 54.1],
       [15.2, 54.2], [14.5, 54.4], [13.5, 54.7], [12.5, 55.2], [12.0, 55.5], [12.0, 55.3]
     ]
+  },
+  {
+    id: 'CABLE-ELISA-FEC1',
+    name: 'Elisa FEC-1',
+    subtitle: 'Data Cable HEL → TLL (DAMAGED TODAY)',
+    type: 'telecommunications',
+    severity: 'CRITICAL',
+    color: [236, 72, 153], // Pink - BREAKING incident
+    coordinates: [
+      [24.9, 60.05], [24.6, 59.85], [24.4, 59.65], [24.55, 59.5],
+      [24.7, 59.45], [24.85, 59.5], [24.6, 59.7], [24.8, 59.9], [25.1, 60.1], [24.9, 60.05]
+    ]
+  },
+  {
+    id: 'CABLE-ELISA-FEC2',
+    name: 'Elisa FEC-2',
+    subtitle: 'Data Cable HEL → TLL (DAMAGED TODAY)',
+    type: 'telecommunications',
+    severity: 'CRITICAL',
+    color: [244, 114, 182], // Lighter pink - BREAKING incident
+    coordinates: [
+      [24.7, 60.0], [24.4, 59.8], [24.2, 59.6], [24.35, 59.45],
+      [24.5, 59.4], [24.65, 59.45], [24.4, 59.65], [24.6, 59.85], [24.9, 60.05], [24.7, 60.0]
+    ]
+  },
+  {
+    id: 'ZONE-PORKKALA-INCIDENT',
+    name: 'Porkkala Incident Zone',
+    subtitle: 'ACTIVE - Anchor Drag Suspected (TODAY)',
+    type: 'investigation_area',
+    severity: 'CRITICAL',
+    color: [239, 68, 68], // Red - BREAKING investigation
+    coordinates: [
+      [24.2, 60.0], [24.0, 59.85], [23.8, 59.7], [24.0, 59.55],
+      [24.3, 59.5], [24.6, 59.55], [24.5, 59.7], [24.4, 59.85], [24.4, 60.0], [24.2, 60.0]
+    ]
   }
 ]
 
@@ -501,6 +538,7 @@ export function getInfrastructureIcon(type) {
     telecommunications: '📡',
     gas_pipeline: '🔥',
     power: '⚡',
+    investigation_area: '🚨',
   }
   return icons[type] || '📍'
 }

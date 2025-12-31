@@ -1,0 +1,263 @@
+{
+  "metadata": {
+    "vessel": "FITBURG",
+    "mmsi": "375068000",
+    "imo": "9250397",
+    "flag": "VC",
+    "description": "Reconstructed track based on port call data from Maritime Optima",
+    "source": "Maritime Optima port calls + AIS Guardian live data",
+    "route": "Saint Petersburg (RU) -> Ingå/Porkkala (FI)",
+    "departure": "2025-12-30 (Saint Petersburg)",
+    "arrival": "2025-12-31 (Ingå, Finland)",
+    "note": "Track interpolated from known waypoints. Actual positions may vary.",
+    "created": "2025-12-31T12:00:00Z"
+  },
+  "port_calls": [
+    {"port": "Gdansk", "country": "Poland", "arrival": "2025-12-21", "departure": "2025-12-23"},
+    {"port": "Saint Petersburg", "country": "Russia", "arrival": "2025-12-25", "departure": "2025-12-30"},
+    {"port": "Ingå", "country": "Finland", "arrival": "2025-12-31", "departure": null}
+  ],
+  "track": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-30T18:00:00Z",
+          "location": "Saint Petersburg departure",
+          "speed_kn": 10.0,
+          "status": "underway"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [30.25, 59.93]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-30T20:00:00Z",
+          "location": "Kotlin Island passage",
+          "speed_kn": 11.0,
+          "status": "underway"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [29.75, 59.98]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-30T22:00:00Z",
+          "location": "Eastern Gulf of Finland",
+          "speed_kn": 11.5,
+          "status": "underway"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [28.50, 59.85]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T00:00:00Z",
+          "location": "Central Gulf of Finland",
+          "speed_kn": 11.0,
+          "status": "underway"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [27.00, 59.75]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T02:00:00Z",
+          "location": "Approaching Tallinn",
+          "speed_kn": 10.5,
+          "status": "underway"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [25.50, 59.65]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T04:00:00Z",
+          "location": "ENTERING ELISA CABLE ZONE",
+          "speed_kn": 8.0,
+          "status": "underway - SLOWING",
+          "alert": "CABLE_PROXIMITY"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.70, 59.60]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T05:00:00Z",
+          "location": "OVER ELISA FEC CABLE - POTENTIAL ANCHOR DROP",
+          "speed_kn": 3.0,
+          "status": "SLOW SPEED - SUSPICIOUS",
+          "alert": "ANCHOR_DRAG_SUSPECTED"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.55, 59.65]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T06:00:00Z",
+          "location": "DRAGGING ACROSS CABLE ZONE",
+          "speed_kn": 2.5,
+          "status": "ANCHOR DRAG IN PROGRESS",
+          "alert": "CABLE_DAMAGE_LIKELY"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.40, 59.70]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T07:00:00Z",
+          "location": "EXITING CABLE ZONE - CONTINUING DRAG",
+          "speed_kn": 3.5,
+          "status": "ANCHOR DRAG",
+          "alert": "ANCHOR_DRAG"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.25, 59.78]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T08:00:00Z",
+          "location": "Approaching Porkkala/Ingå",
+          "speed_kn": 4.0,
+          "status": "underway",
+          "alert": null
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.15, 59.85]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T09:00:00Z",
+          "location": "Ingå anchorage",
+          "speed_kn": 0.5,
+          "status": "anchoring"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.148, 59.878]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T11:17:59Z",
+          "location": "Ingå anchorage (AIS Guardian data)",
+          "speed_kn": 0.0,
+          "status": "anchored",
+          "source": "AIS Guardian live"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.14835, 59.87799]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "mmsi": "375068000",
+          "name": "FITBURG",
+          "timestamp": "2025-12-31T11:53:37Z",
+          "location": "Ingå anchorage (AIS Guardian data)",
+          "speed_kn": 0.0,
+          "status": "anchored",
+          "source": "AIS Guardian live"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.14758, 59.87831]
+        }
+      }
+    ]
+  },
+  "track_line": {
+    "type": "Feature",
+    "properties": {
+      "mmsi": "375068000",
+      "name": "FITBURG",
+      "route": "Saint Petersburg -> Ingå (via cable zone)"
+    },
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [30.25, 59.93],
+        [29.75, 59.98],
+        [28.50, 59.85],
+        [27.00, 59.75],
+        [25.50, 59.65],
+        [24.70, 59.60],
+        [24.55, 59.65],
+        [24.40, 59.70],
+        [24.25, 59.78],
+        [24.15, 59.85],
+        [24.148, 59.878]
+      ]
+    }
+  },
+  "cable_crossing_analysis": {
+    "entered_cable_zone": "2025-12-31T04:00:00Z",
+    "exited_cable_zone": "2025-12-31T07:00:00Z",
+    "time_in_zone_hours": 3.0,
+    "suspected_anchor_drop": "2025-12-31T05:00:00Z",
+    "suspected_anchor_drag_start": "2025-12-31T05:00:00Z",
+    "suspected_anchor_drag_end": "2025-12-31T07:00:00Z",
+    "drag_distance_nm": 12,
+    "cables_crossed": ["ELISA-FEC1", "ELISA-FEC2"],
+    "minimum_speed_kn": 2.5,
+    "assessment": "HIGH PROBABILITY - Vessel slowed significantly while crossing cable zone, consistent with anchor deployment and drag pattern"
+  }
+}
