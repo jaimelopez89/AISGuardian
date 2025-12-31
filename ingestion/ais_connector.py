@@ -47,6 +47,8 @@ def setup_ssl_certs():
     cert_b64 = os.getenv('KAFKA_SSL_CERT_BASE64')
     key_b64 = os.getenv('KAFKA_SSL_KEY_BASE64')
 
+    print(f"SSL setup: CA_BASE64 present={bool(ca_b64)}, CERT_BASE64 present={bool(cert_b64)}, KEY_BASE64 present={bool(key_b64)}", flush=True)
+
     if ca_b64 and cert_b64 and key_b64:
         ssl_dir = tempfile.mkdtemp(prefix='kafka_ssl_')
 
@@ -65,7 +67,14 @@ def setup_ssl_certs():
         os.environ['KAFKA_SSL_CERT'] = cert_path
         os.environ['KAFKA_SSL_KEY'] = key_path
 
-        logging.info(f"SSL certs written to {ssl_dir}")
+        print(f"SSL certs written to {ssl_dir}", flush=True)
+        print(f"  CA: {ca_path}", flush=True)
+        print(f"  CERT: {cert_path}", flush=True)
+        print(f"  KEY: {key_path}", flush=True)
+        return True
+    else:
+        print("WARNING: Base64 SSL certs not found in env vars. Using file paths from KAFKA_SSL_* vars.", flush=True)
+        return False
 
 # Setup SSL certs on import
 setup_ssl_certs()
