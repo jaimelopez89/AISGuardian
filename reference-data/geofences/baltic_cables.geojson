@@ -302,6 +302,96 @@
           ]
         ]
       }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-ELISA-FEC1",
+        "name": "Elisa FEC-1 Data Cable (Helsinki-Tallinn)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "telecommunications",
+        "owner": "Elisa Corporation",
+        "severity": "CRITICAL",
+        "buffer_nm": 5,
+        "description": "Finland Estonia Connection submarine fiber optic cable - DAMAGED Dec 31, 2025 (BREAKING - under investigation)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [24.9, 60.05],
+            [24.6, 59.85],
+            [24.4, 59.65],
+            [24.55, 59.5],
+            [24.7, 59.45],
+            [24.85, 59.5],
+            [24.6, 59.7],
+            [24.8, 59.9],
+            [25.1, 60.1],
+            [24.9, 60.05]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-ELISA-FEC2",
+        "name": "Elisa FEC-2 Data Cable (Helsinki-Tallinn)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "telecommunications",
+        "owner": "Elisa Corporation",
+        "severity": "CRITICAL",
+        "buffer_nm": 5,
+        "description": "Second Finland Estonia Connection submarine fiber optic cable - DAMAGED Dec 31, 2025 (BREAKING - under investigation)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [24.7, 60.0],
+            [24.4, 59.8],
+            [24.2, 59.6],
+            [24.35, 59.45],
+            [24.5, 59.4],
+            [24.65, 59.45],
+            [24.4, 59.65],
+            [24.6, 59.85],
+            [24.9, 60.05],
+            [24.7, 60.0]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ZONE-PORKKALA-INCIDENT",
+        "name": "Porkkala Incident Zone (Anchor Drag Investigation)",
+        "zone_type": "incident_investigation",
+        "infrastructure_type": "investigation_area",
+        "owner": "Finnish Authorities",
+        "severity": "CRITICAL",
+        "buffer_nm": 3,
+        "description": "ANCHOR DRAG INVESTIGATION Dec 31, 2025. Primary suspect: FITBURG (375068000)."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [24.2, 60.0],
+            [24.0, 59.85],
+            [23.8, 59.7],
+            [24.0, 59.55],
+            [24.3, 59.5],
+            [24.6, 59.55],
+            [24.5, 59.7],
+            [24.4, 59.85],
+            [24.4, 60.0],
+            [24.2, 60.0]
+          ]
+        ]
+      }
     }
   ]
 }

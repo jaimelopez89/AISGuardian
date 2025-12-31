@@ -1,0 +1,219 @@
+{
+  "metadata": {
+    "vessel": "FITBURG",
+    "mmsi": "375068000",
+    "imo": "9250397",
+    "flag": "VC",
+    "source": "VesselFinder / MarineTraffic AIS track - 1 day",
+    "extracted": "2025-12-31",
+    "reference_point": {
+      "current_position": {"lat": 59.878, "lon": 24.148},
+      "note": "Anchored near Ingå, Finland"
+    },
+    "speed_color_legend": {
+      "green": "10-16 kn",
+      "yellow": "4-8 kn",
+      "red": "0-4 kn"
+    }
+  },
+  "track": [
+    {
+      "timestamp": "2025-12-30T12:00:00Z",
+      "lat": 60.00,
+      "lon": 28.50,
+      "speed_kn": 11.5,
+      "status": "underway",
+      "location": "Eastern Gulf of Finland (from St. Petersburg)",
+      "track_color": "green"
+    },
+    {
+      "timestamp": "2025-12-30T14:00:00Z",
+      "lat": 59.95,
+      "lon": 27.80,
+      "speed_kn": 11.0,
+      "status": "underway",
+      "location": "Gulf of Finland",
+      "track_color": "green"
+    },
+    {
+      "timestamp": "2025-12-30T16:00:00Z",
+      "lat": 59.92,
+      "lon": 27.00,
+      "speed_kn": 11.0,
+      "status": "underway",
+      "location": "Passing Kotka offshore",
+      "track_color": "green"
+    },
+    {
+      "timestamp": "2025-12-30T18:00:00Z",
+      "lat": 59.90,
+      "lon": 26.20,
+      "speed_kn": 10.5,
+      "status": "underway",
+      "location": "Central Gulf of Finland",
+      "track_color": "green"
+    },
+    {
+      "timestamp": "2025-12-30T20:00:00Z",
+      "lat": 59.89,
+      "lon": 25.50,
+      "speed_kn": 10.5,
+      "status": "underway",
+      "location": "Approaching Porvoo offshore",
+      "track_color": "green"
+    },
+    {
+      "timestamp": "2025-12-30T22:00:00Z",
+      "lat": 59.88,
+      "lon": 24.90,
+      "speed_kn": 10.0,
+      "status": "underway",
+      "location": "South of Helsinki - ENTERING CABLE ZONE",
+      "track_color": "green",
+      "alert": "CABLE_PROXIMITY"
+    },
+    {
+      "timestamp": "2025-12-31T00:00:00Z",
+      "lat": 59.85,
+      "lon": 24.65,
+      "speed_kn": 9.5,
+      "status": "underway",
+      "location": "OVER ELISA FEC-1 CABLE - ANCHOR DEPLOYED",
+      "track_color": "green-yellow",
+      "alert": "CABLE_PROXIMITY_CRITICAL",
+      "note": "Anchor deployment point - inside FEC-1 cable zone"
+    },
+    {
+      "timestamp": "2025-12-31T01:00:00Z",
+      "lat": 59.80,
+      "lon": 24.50,
+      "speed_kn": 8.0,
+      "status": "slowing",
+      "location": "ANCHOR CATCHING ON CABLE - INSIDE FEC-2 ZONE",
+      "track_color": "yellow",
+      "alert": "ANCHOR_DRAG_SUSPECTED",
+      "note": "Inside FEC-2 cable zone - anchor engaging seabed/cable"
+    },
+    {
+      "timestamp": "2025-12-31T02:00:00Z",
+      "lat": 59.75,
+      "lon": 24.42,
+      "speed_kn": 6.0,
+      "status": "slow",
+      "location": "ANCHOR DRAG - CABLE DAMAGE OCCURRING",
+      "track_color": "yellow-orange",
+      "alert": "ANCHOR_DRAG",
+      "note": "Still inside FEC-2 zone - active cable damage"
+    },
+    {
+      "timestamp": "2025-12-31T03:00:00Z",
+      "lat": 59.72,
+      "lon": 24.35,
+      "speed_kn": 5.0,
+      "status": "slow",
+      "location": "EXITING CABLE ZONE - CONTINUED DRAG",
+      "track_color": "orange",
+      "alert": "ANCHOR_DRAG"
+    },
+    {
+      "timestamp": "2025-12-31T04:30:00Z",
+      "lat": 59.78,
+      "lon": 24.25,
+      "speed_kn": 4.0,
+      "status": "very slow",
+      "location": "TURNING NORTH - ANCHOR DRAG RESISTANCE",
+      "track_color": "orange-red"
+    },
+    {
+      "timestamp": "2025-12-31T06:00:00Z",
+      "lat": 59.83,
+      "lon": 24.18,
+      "speed_kn": 2.5,
+      "status": "approaching anchor",
+      "location": "Heading to anchorage",
+      "track_color": "red"
+    },
+    {
+      "timestamp": "2025-12-31T08:00:00Z",
+      "lat": 59.87,
+      "lon": 24.15,
+      "speed_kn": 1.0,
+      "status": "anchoring",
+      "location": "Approaching Ingå anchorage",
+      "track_color": "red"
+    },
+    {
+      "timestamp": "2025-12-31T10:00:00Z",
+      "lat": 59.878,
+      "lon": 24.148,
+      "speed_kn": 0.0,
+      "status": "anchored",
+      "location": "FITBURG current position - Ingå/Porkkala",
+      "track_color": "red",
+      "note": "Current position - anchored"
+    }
+  ],
+  "track_geojson": {
+    "type": "Feature",
+    "properties": {
+      "mmsi": "375068000",
+      "name": "FITBURG",
+      "description": "1-day track - anchor drag through cable zone"
+    },
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [28.50, 60.00],
+        [27.80, 59.95],
+        [27.00, 59.92],
+        [26.20, 59.90],
+        [25.50, 59.89],
+        [24.90, 59.88],
+        [24.65, 59.85],
+        [24.50, 59.80],
+        [24.42, 59.75],
+        [24.35, 59.72],
+        [24.25, 59.78],
+        [24.18, 59.83],
+        [24.15, 59.87],
+        [24.148, 59.878]
+      ]
+    }
+  },
+  "cable_zone_analysis": {
+    "entered_zone_time": "2025-12-30T22:00:00Z",
+    "entered_zone_position": {"lat": 59.88, "lon": 24.90},
+    "anchor_deployment_time": "2025-12-31T00:00:00Z",
+    "anchor_deployment_position": {"lat": 59.85, "lon": 24.65},
+    "anchor_drag_start": "2025-12-31T01:00:00Z",
+    "anchor_drag_start_position": {"lat": 59.80, "lon": 24.50},
+    "exited_zone_time": "2025-12-31T03:00:00Z",
+    "exited_zone_position": {"lat": 59.72, "lon": 24.35},
+    "time_in_cable_zone_hours": 5.0,
+    "drag_inside_zone_hours": 2.0,
+    "total_drag_distance_nm": 18,
+    "drag_inside_zone_nm": 8,
+    "cables_crossed": ["ELISA-FEC1", "ELISA-FEC2"],
+    "speed_at_entry_kn": 10.0,
+    "speed_at_anchor_drop_kn": 9.5,
+    "minimum_speed_kn": 2.5,
+    "speed_reduction_percent": 74,
+    "assessment": "Vessel entered cable zone at 10 kts, deployed anchor at 24.65°E (inside FEC-1), anchor caught cable at 24.50°E (inside FEC-2), dragged anchor through zone causing damage, exited zone at 24.35°E. Classic anchor drag sabotage pattern."
+  },
+  "ais_positions_for_replay": [
+    {"mmsi": "375068000", "timestamp": 1735560000, "lat": 60.00, "lon": 28.50, "sog": 11.5, "cog": 270},
+    {"mmsi": "375068000", "timestamp": 1735567200, "lat": 59.95, "lon": 27.80, "sog": 11.0, "cog": 268},
+    {"mmsi": "375068000", "timestamp": 1735574400, "lat": 59.92, "lon": 27.00, "sog": 11.0, "cog": 265},
+    {"mmsi": "375068000", "timestamp": 1735581600, "lat": 59.90, "lon": 26.20, "sog": 10.5, "cog": 265},
+    {"mmsi": "375068000", "timestamp": 1735588800, "lat": 59.89, "lon": 25.50, "sog": 10.5, "cog": 265},
+    {"mmsi": "375068000", "timestamp": 1735596000, "lat": 59.88, "lon": 24.90, "sog": 10.0, "cog": 265},
+    {"mmsi": "375068000", "timestamp": 1735603200, "lat": 59.85, "lon": 24.65, "sog": 9.5, "cog": 250},
+    {"mmsi": "375068000", "timestamp": 1735606800, "lat": 59.80, "lon": 24.50, "sog": 8.0, "cog": 240},
+    {"mmsi": "375068000", "timestamp": 1735610400, "lat": 59.75, "lon": 24.42, "sog": 6.0, "cog": 230},
+    {"mmsi": "375068000", "timestamp": 1735614000, "lat": 59.72, "lon": 24.35, "sog": 5.0, "cog": 250},
+    {"mmsi": "375068000", "timestamp": 1735619400, "lat": 59.78, "lon": 24.25, "sog": 4.0, "cog": 330},
+    {"mmsi": "375068000", "timestamp": 1735624800, "lat": 59.83, "lon": 24.18, "sog": 2.5, "cog": 350},
+    {"mmsi": "375068000", "timestamp": 1735632000, "lat": 59.87, "lon": 24.15, "sog": 1.0, "cog": 350},
+    {"mmsi": "375068000", "timestamp": 1735639200, "lat": 59.878, "lon": 24.148, "sog": 0.0, "cog": 0}
+  ]
+}

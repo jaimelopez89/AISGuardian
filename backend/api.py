@@ -4,8 +4,10 @@ Simple REST API backend that reads from Aiven Kafka and serves to frontend.
 Uses FastAPI with Server-Sent Events for real-time updates.
 """
 
+import base64
 import json
 import os
+import tempfile
 import threading
 from collections import defaultdict, deque
 from datetime import datetime, timezone
@@ -23,6 +25,48 @@ env_path = Path('.env')
 if not env_path.exists():
     env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
+
+# Handle SSL certificates - either from files or base64 env vars (for Railway)
+SSL_CERT_DIR = None
+
+def setup_ssl_certs():
+    """Setup SSL certificates from base64 env vars if files don't exist."""
+    global SSL_CERT_DIR
+
+    ca_path = os.getenv('KAFKA_SSL_CA_CERT', './ca.pem')
+    cert_path = os.getenv('KAFKA_SSL_CERT', './service.cert')
+    key_path = os.getenv('KAFKA_SSL_KEY', './service.key')
+
+    # Check if we have base64-encoded certs in env vars
+    ca_b64 = os.getenv('KAFKA_SSL_CA_CERT_BASE64')
+    cert_b64 = os.getenv('KAFKA_SSL_CERT_BASE64')
+    key_b64 = os.getenv('KAFKA_SSL_KEY_BASE64')
+
+    if ca_b64 and cert_b64 and key_b64:
+        # Create temp directory for certs
+        SSL_CERT_DIR = tempfile.mkdtemp(prefix='kafka_ssl_')
+
+        # Write decoded certs to temp files
+        ca_path = os.path.join(SSL_CERT_DIR, 'ca.pem')
+        cert_path = os.path.join(SSL_CERT_DIR, 'service.cert')
+        key_path = os.path.join(SSL_CERT_DIR, 'service.key')
+
+        with open(ca_path, 'wb') as f:
+            f.write(base64.b64decode(ca_b64))
+        with open(cert_path, 'wb') as f:
+            f.write(base64.b64decode(cert_b64))
+        with open(key_path, 'wb') as f:
+            f.write(base64.b64decode(key_b64))
+
+        print(f"SSL certs written to {SSL_CERT_DIR}", flush=True)
+
+        # Update env vars to point to temp files
+        os.environ['KAFKA_SSL_CA_CERT'] = ca_path
+        os.environ['KAFKA_SSL_CERT'] = cert_path
+        os.environ['KAFKA_SSL_KEY'] = key_path
+
+# Setup SSL certs on import
+setup_ssl_certs()
 
 app = FastAPI(title="AIS Guardian API")
 

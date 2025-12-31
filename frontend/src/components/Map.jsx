@@ -53,6 +53,7 @@ export default function Map({
   showPorts = true,
   showCables = true,
   flyTo = null,  // { latitude, longitude, zoom? } - fly to this location
+  investigationTrack = null,  // Historical track for investigation mode
 }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE)
   const [hoverInfo, setHoverInfo] = useState(null)
@@ -278,6 +279,115 @@ export default function Map({
     })
   }, [trails, showTrails])
 
+  // Investigation track layers - shows historical track with waypoints
+  const investigationLayers = useMemo(() => {
+    if (!investigationTrack) return []
+
+    const layers = []
+
+    // Track line - gradient from green (normal speed) to red (slow/alert)
+    const trackLine = new PathLayer({
+      id: 'investigation-track-line',
+      data: [{
+        path: investigationTrack.coordinates,
+      }],
+      pickable: false,
+      widthUnits: 'pixels',
+      widthScale: 1,
+      widthMinPixels: 3,
+      widthMaxPixels: 6,
+      capRounded: true,
+      jointRounded: true,
+      getPath: d => d.path,
+      getColor: [236, 72, 153, 200], // Pink for investigation
+      getWidth: 4,
+    })
+    layers.push(trackLine)
+
+    // Outer glow for track
+    const trackGlow = new PathLayer({
+      id: 'investigation-track-glow',
+      data: [{
+        path: investigationTrack.coordinates,
+      }],
+      pickable: false,
+      widthUnits: 'pixels',
+      getPath: d => d.path,
+      getColor: [236, 72, 153, 60], // Pink glow
+      getWidth: 12,
+    })
+    layers.push(trackGlow)
+
+    // Waypoint markers - colored by status/alert
+    const getWaypointColor = (wp) => {
+      if (wp.alert === 'ANCHOR_DRAG_SUSPECTED' || wp.alert === 'ANCHOR_DRAG') {
+        return [239, 68, 68, 255] // Red for anchor drag
+      }
+      if (wp.alert === 'CABLE_PROXIMITY_CRITICAL' || wp.alert === 'CABLE_DAMAGE_LIKELY') {
+        return [249, 115, 22, 255] // Orange for cable critical
+      }
+      if (wp.alert === 'CABLE_PROXIMITY') {
+        return [234, 179, 8, 255] // Yellow for cable proximity
+      }
+      if (wp.speed < 4) {
+        return [239, 68, 68, 255] // Red for slow/stopped
+      }
+      if (wp.speed < 8) {
+        return [234, 179, 8, 255] // Yellow for slowing
+      }
+      return [34, 197, 94, 255] // Green for normal speed
+    }
+
+    const waypointMarkers = new ScatterplotLayer({
+      id: 'investigation-waypoints',
+      data: investigationTrack.waypoints,
+      pickable: true,
+      opacity: 1,
+      stroked: true,
+      filled: true,
+      radiusScale: 1,
+      radiusMinPixels: 5,
+      radiusMaxPixels: 12,
+      lineWidthMinPixels: 2,
+      getPosition: d => [d.lon, d.lat],
+      getRadius: d => d.alert ? 8 : 5,
+      getFillColor: d => getWaypointColor(d),
+      getLineColor: [255, 255, 255, 200],
+      onHover: info => {
+        if (info.object) {
+          setHoverInfo({ ...info, isInvestigationWaypoint: true })
+        } else if (hoverInfo?.isInvestigationWaypoint) {
+          setHoverInfo(null)
+        }
+      },
+    })
+    layers.push(waypointMarkers)
+
+    // Alert waypoint labels (only at higher zoom)
+    if (viewState.zoom >= 7) {
+      const alertWaypoints = investigationTrack.waypoints.filter(wp => wp.alert)
+      const waypointLabels = new TextLayer({
+        id: 'investigation-waypoint-labels',
+        data: alertWaypoints,
+        pickable: false,
+        getPosition: d => [d.lon, d.lat],
+        getText: d => d.alert.replace(/_/g, ' '),
+        getSize: 10,
+        getColor: [255, 255, 255, 255],
+        getTextAnchor: 'start',
+        getAlignmentBaseline: 'center',
+        getPixelOffset: [12, 0],
+        fontFamily: 'Monaco, monospace',
+        fontWeight: 'bold',
+        outlineWidth: 2,
+        outlineColor: [15, 23, 42, 255],
+      })
+      layers.push(waypointLabels)
+    }
+
+    return layers
+  }, [investigationTrack, viewState.zoom, hoverInfo])
+
   // Ports layer - shows port boundaries
   const portsLayer = useMemo(() => {
     if (!showPorts || ports.length === 0) return null
@@ -388,6 +498,7 @@ export default function Map({
     portsLayer,
     portLabelLayer,
     trailsLayer,
+    ...investigationLayers,  // Investigation track below alerts
     alertLayer,      // Alert circles below vessels
     vesselLayer,     // Vessel icons on top - get click priority
     labelLayer,
@@ -462,6 +573,55 @@ export default function Map({
             <div className="text-slate-300 text-xs leading-relaxed">
               {object.description?.slice(0, 120)}...
             </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Investigation waypoint tooltip
+    if (hoverInfo.isInvestigationWaypoint) {
+      const time = new Date(object.timestamp).toLocaleString()
+      const alertClass = object.alert
+        ? (object.alert.includes('ANCHOR') ? 'text-red-400' : 'text-orange-400')
+        : (object.speed < 4 ? 'text-red-400' : object.speed < 8 ? 'text-amber-400' : 'text-green-400')
+      return (
+        <div
+          className="absolute pointer-events-none z-50"
+          style={{ left: x + 15, top: y + 15 }}
+        >
+          <div className="bg-slate-900/95 backdrop-blur-sm border border-pink-600/50 rounded-lg p-3 shadow-2xl min-w-[220px]">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🔍</span>
+              <div>
+                <div className="font-bold text-pink-400 text-sm">FITBURG Investigation</div>
+                <div className="text-slate-400 text-xs">{time}</div>
+              </div>
+            </div>
+
+            <div className="text-slate-300 text-xs mb-2">{object.location}</div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs border-t border-slate-700 pt-2">
+              <div className="text-slate-500">Speed</div>
+              <div className={`font-mono ${alertClass}`}>{object.speed} kts</div>
+
+              <div className="text-slate-500">Position</div>
+              <div className="text-slate-200 font-mono text-[10px]">
+                {object.lat.toFixed(4)}°N, {object.lon.toFixed(4)}°E
+              </div>
+
+              <div className="text-slate-500">Status</div>
+              <div className="text-slate-200">{object.status}</div>
+            </div>
+
+            {object.alert && (
+              <div className={`mt-2 px-2 py-1 rounded text-xs font-medium ${
+                object.alert.includes('ANCHOR')
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+              }`}>
+                {object.alert.replace(/_/g, ' ')}
+              </div>
+            )}
           </div>
         </div>
       )

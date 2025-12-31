@@ -15,12 +15,14 @@ Environment variables required:
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import signal
 import ssl
 import sys
+import tempfile
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -37,6 +39,36 @@ env_path = Path('.env')
 if not env_path.exists():
     env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
+
+
+def setup_ssl_certs():
+    """Setup SSL certificates from base64 env vars if files don't exist (for Railway)."""
+    ca_b64 = os.getenv('KAFKA_SSL_CA_CERT_BASE64')
+    cert_b64 = os.getenv('KAFKA_SSL_CERT_BASE64')
+    key_b64 = os.getenv('KAFKA_SSL_KEY_BASE64')
+
+    if ca_b64 and cert_b64 and key_b64:
+        ssl_dir = tempfile.mkdtemp(prefix='kafka_ssl_')
+
+        ca_path = os.path.join(ssl_dir, 'ca.pem')
+        cert_path = os.path.join(ssl_dir, 'service.cert')
+        key_path = os.path.join(ssl_dir, 'service.key')
+
+        with open(ca_path, 'wb') as f:
+            f.write(base64.b64decode(ca_b64))
+        with open(cert_path, 'wb') as f:
+            f.write(base64.b64decode(cert_b64))
+        with open(key_path, 'wb') as f:
+            f.write(base64.b64decode(key_b64))
+
+        os.environ['KAFKA_SSL_CA_CERT'] = ca_path
+        os.environ['KAFKA_SSL_CERT'] = cert_path
+        os.environ['KAFKA_SSL_KEY'] = key_path
+
+        logging.info(f"SSL certs written to {ssl_dir}")
+
+# Setup SSL certs on import
+setup_ssl_certs()
 
 # Configure logging
 logging.basicConfig(

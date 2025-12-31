@@ -1,11 +1,14 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import Map from './components/Map'
 import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
 import { useVesselPositions, useAlerts, useTrails } from './hooks/useKafkaStream'
-import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route, Cable, Filter, Wifi, Fuel, Zap } from 'lucide-react'
+import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route, Cable, Filter, Wifi, Fuel, Zap, Target, MapPin } from 'lucide-react'
 import { getVesselCategory, BALTIC_PORTS, BALTIC_CABLE_GEOFENCES } from './utils/geo'
+
+// FITBURG investigation track data (extracted from VesselFinder)
+import fitburgTrack from '../../reference-data/fitburg_track_vesselfinder.json'
 
 // Get Mapbox token from environment
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
@@ -69,6 +72,56 @@ export default function App() {
 
   // Flagged states filter
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false)
+
+  // Investigation mode - focus on specific vessel
+  const [focusVesselMmsi, setFocusVesselMmsi] = useState(null) // e.g., '375068000' for FITBURG
+  const [showInvestigationTrack, setShowInvestigationTrack] = useState(true)
+
+  // Parse investigation track into usable format
+  const investigationTrack = useMemo(() => {
+    if (!fitburgTrack) return null
+    return {
+      mmsi: fitburgTrack.metadata.mmsi,
+      name: fitburgTrack.metadata.vessel,
+      flag: fitburgTrack.metadata.flag,
+      coordinates: fitburgTrack.track_geojson.geometry.coordinates,
+      waypoints: fitburgTrack.track.map(wp => ({
+        timestamp: wp.timestamp,
+        lat: wp.lat,
+        lon: wp.lon,
+        speed: wp.speed_kn,
+        status: wp.status,
+        location: wp.location,
+        alert: wp.alert,
+        trackColor: wp.track_color,
+      })),
+      cableAnalysis: fitburgTrack.cable_zone_analysis,
+    }
+  }, [])
+
+  // Generate synthetic alerts from investigation track for FITBURG
+  const investigationAlerts = useMemo(() => {
+    if (!fitburgTrack) return []
+
+    const alertWaypoints = fitburgTrack.track.filter(wp => wp.alert)
+    return alertWaypoints.map((wp, idx) => ({
+      id: `investigation-alert-${idx}`,
+      mmsi: fitburgTrack.metadata.mmsi,
+      vessel_name: fitburgTrack.metadata.vessel,
+      timestamp: wp.timestamp,
+      latitude: wp.lat,
+      longitude: wp.lon,
+      severity: wp.alert.includes('ANCHOR_DRAG') ? 'CRITICAL' :
+                wp.alert.includes('CRITICAL') ? 'CRITICAL' : 'HIGH',
+      alert_type: wp.alert.includes('ANCHOR') ? 'ANCHOR_DRAG' : 'CABLE_PROXIMITY',
+      title: wp.alert.replace(/_/g, ' '),
+      description: `${fitburgTrack.metadata.vessel} (MMSI: ${fitburgTrack.metadata.mmsi}) - ${wp.location}. Speed: ${wp.speed_kn} kts. Status: ${wp.status}. Flag: St. Vincent & Grenadines (VC). Vessel arrived from Saint Petersburg, Russia.`,
+      zone_id: 'CABLE-ELISA-FEC1',
+      zone_name: 'Elisa FEC Cable Zone',
+      speed: wp.speed_kn,
+      isInvestigationAlert: true,
+    }))
+  }, [])
 
   // Toggle a vessel type on/off
   const toggleVesselType = useCallback((typeKey) => {
@@ -235,13 +288,27 @@ export default function App() {
       })
     }
 
+    // Focus on a specific vessel (investigation mode)
+    if (focusVesselMmsi) {
+      filtered = filtered.filter(v => v.mmsi === focusVesselMmsi)
+    }
+
     return filtered
-  }, [vessels, enabledVesselTypes, enabledSpeedFilters, showOnlyAlerts, showOnlyFlagged, alerts])
+  }, [vessels, enabledVesselTypes, enabledSpeedFilters, showOnlyAlerts, showOnlyFlagged, alerts, focusVesselMmsi])
 
   const displayAlerts = useMemo(() => {
+    // In investigation mode, show only the investigated vessel's alerts
+    if (focusVesselMmsi) {
+      // Combine real alerts for this vessel with investigation alerts
+      const realAlerts = alerts.filter(a => a.mmsi === focusVesselMmsi)
+      const combined = [...realAlerts, ...investigationAlerts]
+      // Sort by timestamp descending
+      return combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    }
+    // Normal mode - show all alerts
     if (alerts.length > 0) return alerts
     return []
-  }, [alerts])
+  }, [alerts, focusVesselMmsi, investigationAlerts])
 
   // Check for missing Mapbox token
   if (!MAPBOX_TOKEN) {
@@ -294,6 +361,7 @@ export default function App() {
             showPorts={showPorts}
             showCables={showCables}
             flyTo={flyTo}
+            investigationTrack={showInvestigationTrack ? investigationTrack : null}
           />
 
           {/* Selected Vessel Card - top left, max height to avoid overlap */}
@@ -531,6 +599,46 @@ export default function App() {
                   </div>
                   <div className="text-xs text-maritime-500 mt-1">
                     RU, CN, HK, KP, IR vessels
+                  </div>
+                </div>
+
+                {/* Investigation Mode */}
+                <div className="pt-3 border-t border-maritime-700">
+                  <div className="text-sm font-medium text-pink-400 mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Investigation Mode
+                  </div>
+
+                  {/* Focus Vessel Toggle */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Ship className="w-4 h-4 text-pink-400" />
+                      <span className="text-sm text-maritime-300">Focus: FITBURG</span>
+                    </div>
+                    <button
+                      onClick={() => setFocusVesselMmsi(prev => prev ? null : '375068000')}
+                      className={`p-1.5 rounded ${focusVesselMmsi === '375068000' ? 'bg-pink-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                    >
+                      {focusVesselMmsi === '375068000' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Investigation Track Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-pink-400" />
+                      <span className="text-sm text-maritime-300">Historical Track</span>
+                    </div>
+                    <button
+                      onClick={() => setShowInvestigationTrack(!showInvestigationTrack)}
+                      className={`p-1.5 rounded ${showInvestigationTrack ? 'bg-pink-600 text-white' : 'bg-maritime-700 text-maritime-400'}`}
+                    >
+                      {showInvestigationTrack ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-pink-300/70 mt-2">
+                    MMSI 375068000 | Dec 30-31, 2025
                   </div>
                 </div>
 
