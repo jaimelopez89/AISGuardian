@@ -14,6 +14,8 @@ Environment variables required:
     - KAFKA_SSL_KEY: Path to client key (for Aiven)
 """
 
+print("=== AIS Connector starting ===", flush=True)
+
 import asyncio
 import base64
 import json
