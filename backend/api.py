@@ -172,14 +172,25 @@ def consume_vessels_thread():
 
 def consume_alerts_thread():
     """Background thread to consume alerts from Kafka."""
-    config = get_kafka_config('ais-guardian-api-alerts-v2')
+    config = get_kafka_config('ais-guardian-api-alerts-v3')
+    print(f"Alerts consumer config: bootstrap={config['bootstrap.servers']}", flush=True)
     consumer = Consumer(config)
-    consumer.subscribe(['alerts'])
 
-    print("Started alerts consumer thread", flush=True)
+    def on_assign(c, partitions):
+        print(f"Alerts consumer assigned: {partitions}", flush=True)
+
+    consumer.subscribe(['alerts'], on_assign=on_assign)
+
+    print("Alerts consumer subscribed to alerts topic, waiting for partition assignment...", flush=True)
+    msg_count = 0
+    poll_count = 0
 
     while True:
         try:
+            poll_count += 1
+            if poll_count <= 3 or poll_count % 30 == 0:
+                print(f"Alerts consumer poll #{poll_count}, total alerts: {len(alerts_list)}", flush=True)
+
             msg = consumer.poll(1.0)
             if msg is None:
                 continue
@@ -189,6 +200,8 @@ def consume_alerts_thread():
                 continue
 
             data = json.loads(msg.value())
+            msg_count += 1
+            print(f"Alerts consumer: received alert #{msg_count} - {data.get('alert_type', 'unknown')}", flush=True)
             alerts_list.insert(0, data)
             # Keep only last N alerts
             if len(alerts_list) > MAX_ALERTS:
