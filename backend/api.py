@@ -4,6 +4,8 @@ Simple REST API backend that reads from Aiven Kafka and serves to frontend.
 Uses FastAPI with Server-Sent Events for real-time updates.
 """
 
+print("=== AIS Guardian API starting ===", flush=True)
+
 import asyncio
 import base64
 import json
@@ -360,4 +362,6 @@ async def stream_alerts():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    print(f"Starting uvicorn on port {port}", flush=True)
+    uvicorn.run(app, host="0.0.0.0", port=port)
