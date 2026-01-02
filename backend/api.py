@@ -4,6 +4,7 @@ Simple REST API backend that reads from Aiven Kafka and serves to frontend.
 Uses FastAPI with Server-Sent Events for real-time updates.
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -78,6 +79,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+async def root():
+    """Health check endpoint."""
+    return {"status": "ok", "service": "ais-guardian-api"}
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "ok"}
 
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
