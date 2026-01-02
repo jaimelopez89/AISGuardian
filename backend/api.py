@@ -363,5 +363,5 @@ async def stream_alerts():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    print(f"Starting uvicorn on port {port}", flush=True)
+    print(f"=== Starting uvicorn on port {port} ===", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=port)
