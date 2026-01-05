@@ -120,41 +120,53 @@ def get_kafka_config(group_id: str) -> dict:
 
 def consume_vessels_thread():
     """Background thread to consume AIS positions from Kafka."""
-    config = get_kafka_config('ais-guardian-api-vessels-v2')
+    config = get_kafka_config('ais-guardian-api-vessels-v3')
     print(f"Vessel consumer config: bootstrap={config['bootstrap.servers']}, ca={config['ssl.ca.location']}", flush=True)
     consumer = Consumer(config)
 
+    # Track partitions that need seeking
+    partitions_to_seek = []
+    seek_done = False
+
     def on_assign(c, partitions):
-        """Seek to TRAIL_LOOKBACK_HOURS ago to rebuild trail history."""
+        """Mark partitions for seeking after assignment."""
+        nonlocal partitions_to_seek
         print(f"Vessel consumer assigned: {partitions}", flush=True)
-
-        # Calculate timestamp for 72 hours ago (in milliseconds)
-        lookback_ms = int((datetime.now(timezone.utc).timestamp() - (TRAIL_LOOKBACK_HOURS * 3600)) * 1000)
-        print(f"Seeking to {TRAIL_LOOKBACK_HOURS}h ago (timestamp: {lookback_ms})", flush=True)
-
-        # Create TopicPartitions with the target timestamp
-        tps_with_time = [TopicPartition(p.topic, p.partition, lookback_ms) for p in partitions]
-
-        # Get offsets for the target timestamp
-        offsets = c.offsets_for_times(tps_with_time, timeout=10.0)
-
-        for tp in offsets:
-            if tp.offset >= 0:
-                print(f"  Partition {tp.partition}: seeking to offset {tp.offset}", flush=True)
-                c.seek(tp)
-            else:
-                # No messages at that timestamp, seek to beginning
-                print(f"  Partition {tp.partition}: no offset found, seeking to beginning", flush=True)
-                c.seek(TopicPartition(tp.topic, tp.partition, 0))
+        partitions_to_seek = list(partitions)
 
     consumer.subscribe(['ais-raw'], on_assign=on_assign)
 
     print("Vessel consumer subscribed to ais-raw, waiting for partition assignment...", flush=True)
+
+    # Trigger partition assignment with initial poll
+    consumer.poll(1.0)
+    print("Initial poll done, partitions should be assigned", flush=True)
+
     msg_count = 0
     poll_count = 0
+    seek_done = False
 
     while True:
         try:
+            # Perform seek after first poll when partitions are ready
+            if partitions_to_seek and not seek_done:
+                print(f"Performing seek to {TRAIL_LOOKBACK_HOURS}h ago...", flush=True)
+                lookback_ms = int((datetime.now(timezone.utc).timestamp() - (TRAIL_LOOKBACK_HOURS * 3600)) * 1000)
+                tps_with_time = [TopicPartition(p.topic, p.partition, lookback_ms) for p in partitions_to_seek]
+
+                try:
+                    offsets = consumer.offsets_for_times(tps_with_time, timeout=10.0)
+                    for tp in offsets:
+                        if tp.offset >= 0:
+                            print(f"  Partition {tp.partition}: seeking to offset {tp.offset}", flush=True)
+                            consumer.seek(tp)
+                        else:
+                            print(f"  Partition {tp.partition}: no historical offset, using earliest", flush=True)
+                    seek_done = True
+                    print("Seek complete, starting consumption...", flush=True)
+                except Exception as e:
+                    print(f"Seek failed: {e}, will retry...", flush=True)
+
             poll_count += 1
             if poll_count <= 3 or poll_count % 30 == 0:
                 print(f"Vessel consumer poll #{poll_count}", flush=True)
