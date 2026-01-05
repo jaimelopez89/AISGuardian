@@ -690,6 +690,12 @@ export default function Map({
         onViewStateChange={({ viewState }) => setViewState(viewState)}
         controller={true}
         layers={layers}
+        onHover={(info) => {
+          // Clear tooltip when hovering over empty space (no object picked)
+          if (!info.object && hoverInfo) {
+            setHoverInfo(null)
+          }
+        }}
       >
         <MapGL
           mapboxAccessToken={mapboxToken}
