@@ -99,7 +99,7 @@ vessel_state: Dict[str, dict] = {}
 # Vessel trails: store last N positions per vessel for trail visualization
 vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 TRAIL_MAX_POINTS = 500  # Max trail points per vessel
-TRAIL_LOOKBACK_HOURS = 1  # How far back to seek on startup (short to catch up quickly)
+TRAIL_LOOKBACK_HOURS = 24  # How far back to seek on startup
 alerts_list: list = []
 MAX_ALERTS = 1000  # Max alerts to store in memory
 
@@ -205,7 +205,7 @@ def consume_vessels_thread():
 
 def consume_alerts_thread():
     """Background thread to consume alerts from Kafka."""
-    config = get_kafka_config('ais-guardian-api-alerts-v3')
+    config = get_kafka_config('ais-guardian-api-alerts-v4')
     print(f"Alerts consumer config: bootstrap={config['bootstrap.servers']}", flush=True)
     consumer = Consumer(config)
 
