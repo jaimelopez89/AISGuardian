@@ -393,9 +393,9 @@ class AISConnector:
                     # Periodic sync flush in executor to not block event loop
                     if self.messages_received % 100 == 0:
                         loop = asyncio.get_event_loop()
-                        pending_before = self.producer.len()
+                        pending_before = len(self.producer)
                         await loop.run_in_executor(None, lambda: self.producer.flush(timeout=10))
-                        pending_after = self.producer.len()
+                        pending_after = len(self.producer)
 
                         # Log progress with queue status
                         logger.info(
