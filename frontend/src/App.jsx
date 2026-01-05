@@ -4,7 +4,7 @@ import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
 import { useVesselPositions, useAlerts, useTrails } from './hooks/useKafkaStream'
-import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route, Cable, Filter, Wifi, Fuel, Zap, Target, MapPin } from 'lucide-react'
+import { Ship, AlertTriangle, BarChart3, Settings, Search, X, Eye, EyeOff, Layers, Anchor, Route, Cable, Filter, Wifi, Fuel, Zap, Target, MapPin, Clock } from 'lucide-react'
 import { getVesselCategory, BALTIC_PORTS, BALTIC_CABLE_GEOFENCES } from './utils/geo'
 
 // FITBURG investigation track data (extracted from VesselFinder)
@@ -63,6 +63,9 @@ export default function App() {
   const [showTrails, setShowTrails] = useState(true)
   const [showPorts, setShowPorts] = useState(true)
   const [showCables, setShowCables] = useState(true)
+
+  // Trail time horizon in hours (0 = none, 72 = max)
+  const [trailHorizonHours, setTrailHorizonHours] = useState(24)
 
   // Infrastructure type filter
   const [enabledInfraTypes, setEnabledInfraTypes] = useState(new Set(ALL_INFRASTRUCTURE_TYPES))
@@ -207,10 +210,49 @@ export default function App() {
   })
 
   // Fetch vessel trails
-  const { trails } = useTrails({
+  const { trails: rawTrails } = useTrails({
     pollInterval: 5000,
-    enabled: showTrails,
+    enabled: showTrails && trailHorizonHours > 0,
   })
+
+  // Filter trails based on time horizon
+  const trails = useMemo(() => {
+    if (trailHorizonHours === 0 || !rawTrails || rawTrails.length === 0) {
+      return []
+    }
+
+    const cutoffTime = Date.now() - (trailHorizonHours * 60 * 60 * 1000)
+
+    return rawTrails.map(trail => {
+      // Filter coordinates and timestamps based on time horizon
+      const filteredIndices = []
+      if (trail.timestamps) {
+        trail.timestamps.forEach((ts, idx) => {
+          const timestamp = new Date(ts).getTime()
+          if (timestamp >= cutoffTime) {
+            filteredIndices.push(idx)
+          }
+        })
+      }
+
+      // If no timestamps or all points are within range, return as-is
+      if (!trail.timestamps || filteredIndices.length === trail.coordinates.length) {
+        return trail
+      }
+
+      // Filter coordinates to only include recent points
+      if (filteredIndices.length < 2) {
+        return null // Not enough points for a trail
+      }
+
+      return {
+        ...trail,
+        coordinates: filteredIndices.map(i => trail.coordinates[i]),
+        timestamps: filteredIndices.map(i => trail.timestamps[i]),
+        point_count: filteredIndices.length,
+      }
+    }).filter(Boolean) // Remove null entries
+  }, [rawTrails, trailHorizonHours])
 
   const isConnected = vesselsConnected || alertsConnected
   const messagesPerSecond = vesselStats.messagesPerSecond + alertStats.messagesPerSecond
@@ -409,6 +451,37 @@ export default function App() {
                     {showTrails ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
                 </div>
+
+                {/* Trail Time Horizon Slider */}
+                {showTrails && (
+                  <div className="ml-6 mt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3 h-3 text-maritime-500" />
+                        <span className="text-xs text-maritime-400">Time Horizon</span>
+                      </div>
+                      <span className="text-xs font-mono text-blue-400">
+                        {trailHorizonHours === 0 ? 'None' : `${trailHorizonHours}h`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="72"
+                      step="1"
+                      value={trailHorizonHours}
+                      onChange={(e) => setTrailHorizonHours(parseInt(e.target.value))}
+                      className="w-full h-1.5 bg-maritime-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    />
+                    <div className="flex justify-between text-[10px] text-maritime-500">
+                      <span>None</span>
+                      <span>12h</span>
+                      <span>24h</span>
+                      <span>48h</span>
+                      <span>72h</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Ports Toggle */}
                 <div className="flex items-center justify-between">
