@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -317,6 +318,7 @@ public class AISWatchdogJob {
                         .setValueSerializationSchema(new SimpleStringSchema())
                         .build())
                 .setKafkaProducerConfig(kafkaProps)
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
         // Serialize alerts to JSON and send to Kafka
@@ -334,6 +336,7 @@ public class AISWatchdogJob {
                         .setValueSerializationSchema(new SimpleStringSchema())
                         .build())
                 .setKafkaProducerConfig(kafkaProps)
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
         aisPositions
