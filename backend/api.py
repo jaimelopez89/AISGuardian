@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError, TopicPartition
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,8 +97,10 @@ async def health():
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
 # Vessel trails: store last N positions per vessel for trail visualization
-vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=50))
-TRAIL_MAX_POINTS = 50  # Max trail points per vessel
+# Increased to 500 to support 72h of history (assuming ~7 updates/hour average)
+vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
+TRAIL_MAX_POINTS = 500  # Max trail points per vessel
+TRAIL_LOOKBACK_HOURS = 72  # How far back to seek on startup
 alerts_list: list = []
 MAX_ALERTS = 1000  # Max alerts to store in memory
 
@@ -118,12 +120,32 @@ def get_kafka_config(group_id: str) -> dict:
 
 def consume_vessels_thread():
     """Background thread to consume AIS positions from Kafka."""
-    config = get_kafka_config('ais-guardian-api-vessels')
+    config = get_kafka_config('ais-guardian-api-vessels-v2')
     print(f"Vessel consumer config: bootstrap={config['bootstrap.servers']}, ca={config['ssl.ca.location']}", flush=True)
     consumer = Consumer(config)
 
     def on_assign(c, partitions):
+        """Seek to TRAIL_LOOKBACK_HOURS ago to rebuild trail history."""
         print(f"Vessel consumer assigned: {partitions}", flush=True)
+
+        # Calculate timestamp for 72 hours ago (in milliseconds)
+        lookback_ms = int((datetime.now(timezone.utc).timestamp() - (TRAIL_LOOKBACK_HOURS * 3600)) * 1000)
+        print(f"Seeking to {TRAIL_LOOKBACK_HOURS}h ago (timestamp: {lookback_ms})", flush=True)
+
+        # Create TopicPartitions with the target timestamp
+        tps_with_time = [TopicPartition(p.topic, p.partition, lookback_ms) for p in partitions]
+
+        # Get offsets for the target timestamp
+        offsets = c.offsets_for_times(tps_with_time, timeout=10.0)
+
+        for tp in offsets:
+            if tp.offset >= 0:
+                print(f"  Partition {tp.partition}: seeking to offset {tp.offset}", flush=True)
+                c.seek(tp)
+            else:
+                # No messages at that timestamp, seek to beginning
+                print(f"  Partition {tp.partition}: no offset found, seeking to beginning", flush=True)
+                c.seek(TopicPartition(tp.topic, tp.partition, 0))
 
     consumer.subscribe(['ais-raw'], on_assign=on_assign)
 
