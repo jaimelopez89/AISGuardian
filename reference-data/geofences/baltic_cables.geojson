@@ -392,6 +392,37 @@
           ]
         ]
       }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "CABLE-LT-LV-FIBER",
+        "name": "Lithuania-Latvia Fiber Optic Cable (Sventoji-Liepaja)",
+        "zone_type": "cable_protection",
+        "infrastructure_type": "telecommunications",
+        "owner": "Private Operator (Latvia/Lithuania)",
+        "severity": "CRITICAL",
+        "buffer_nm": 5,
+        "description": "Submarine fiber optic cable connecting Sventoji, Lithuania to Liepaja, Latvia (~65km) - DAMAGED Jan 3, 2026 (under investigation)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [20.9, 56.55],
+            [20.85, 56.4],
+            [20.9, 56.25],
+            [20.95, 56.1],
+            [21.0, 55.95],
+            [21.2, 55.95],
+            [21.15, 56.1],
+            [21.1, 56.25],
+            [21.05, 56.4],
+            [21.1, 56.55],
+            [20.9, 56.55]
+          ]
+        ]
+      }
     }
   ]
 }
