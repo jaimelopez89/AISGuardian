@@ -318,7 +318,7 @@ public class AISWatchdogJob {
                         .setValueSerializationSchema(new SimpleStringSchema())
                         .build())
                 .setKafkaProducerConfig(kafkaProps)
-                .setDeliveryGuarantee(DeliveryGuarantee.NONE)
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
         // Serialize alerts to JSON and send to Kafka
@@ -336,7 +336,7 @@ public class AISWatchdogJob {
                         .setValueSerializationSchema(new SimpleStringSchema())
                         .build())
                 .setKafkaProducerConfig(kafkaProps)
-                .setDeliveryGuarantee(DeliveryGuarantee.NONE)
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
         aisPositions
