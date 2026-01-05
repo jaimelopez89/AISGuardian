@@ -174,15 +174,28 @@ class AISConnector:
                 'ssl.key.location': self.kafka_config['ssl_key'],
             })
 
+        logger.info(f"Creating Kafka producer with config:")
+        logger.info(f"  bootstrap.servers: {config['bootstrap.servers']}")
+        logger.info(f"  security.protocol: {config.get('security.protocol', 'PLAINTEXT')}")
+        logger.info(f"  ssl.ca.location: {config.get('ssl.ca.location', 'N/A')}")
+        logger.info(f"  ssl.certificate.location: {config.get('ssl.certificate.location', 'N/A')}")
+        logger.info(f"  ssl.key.location: {config.get('ssl.key.location', 'N/A')}")
+
         return Producer(config)
 
     def _delivery_callback(self, err, msg):
         """Callback for Kafka message delivery reports."""
         if err:
-            logger.error(f"Message delivery failed: {err}")
+            logger.error(f"Message delivery FAILED: {err}")
+            # Log first few failures in detail
+            if self.messages_produced < 10:
+                logger.error(f"  Topic: {msg.topic()}, Partition: {msg.partition()}")
         else:
             self.messages_produced += 1
             self.bytes_produced += len(msg.value())
+            # Log first successful delivery
+            if self.messages_produced == 1:
+                logger.info(f"First message delivered successfully to {msg.topic()}:{msg.partition()} offset {msg.offset()}")
 
     def _normalize_message(self, raw_msg: dict) -> Optional[AISPosition]:
         """
@@ -345,6 +358,13 @@ class AISConnector:
                     raw_msg = json.loads(message)
                     self.messages_received += 1
 
+                    # Log first WebSocket message received
+                    if self.messages_received == 1:
+                        logger.info(f"First WebSocket message received from AISStream")
+                        logger.info(f"  Message type: {raw_msg.get('MessageType')}")
+                        mmsi = raw_msg.get('MetaData', {}).get('MMSI')
+                        logger.info(f"  MMSI: {mmsi}")
+
                     # Normalize the message
                     normalized = self._normalize_message(raw_msg)
                     if not normalized:
@@ -373,13 +393,15 @@ class AISConnector:
                     # Periodic sync flush in executor to not block event loop
                     if self.messages_received % 100 == 0:
                         loop = asyncio.get_event_loop()
+                        pending_before = self.producer.len()
                         await loop.run_in_executor(None, lambda: self.producer.flush(timeout=10))
+                        pending_after = self.producer.len()
 
-                    # Log progress periodically
-                    if self.messages_received % 100 == 0:
+                        # Log progress with queue status
                         logger.info(
                             f"Progress: received={self.messages_received}, "
-                            f"produced={self.messages_produced}"
+                            f"produced={self.messages_produced}, "
+                            f"queue_before={pending_before}, queue_after={pending_after}"
                         )
 
                 except json.JSONDecodeError as e:
@@ -428,19 +450,38 @@ def get_bounding_boxes() -> list[list[list[float]]]:
 
 def main():
     """Main entry point."""
+    logger.info("=== AIS Connector Main Starting ===")
+
     # Validate required environment variables
     api_key = os.getenv("AISSTREAM_API_KEY")
     if not api_key:
         logger.error("AISSTREAM_API_KEY environment variable is required")
         sys.exit(1)
+    logger.info(f"AISSTREAM_API_KEY: {'*' * 8}...{api_key[-4:] if len(api_key) > 4 else '***'}")
 
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    ssl_ca_cert = os.getenv("KAFKA_SSL_CA_CERT")
+    ssl_cert = os.getenv("KAFKA_SSL_CERT")
+    ssl_key = os.getenv("KAFKA_SSL_KEY")
+
+    logger.info(f"KAFKA_BOOTSTRAP_SERVERS: {bootstrap_servers}")
+    logger.info(f"KAFKA_SSL_CA_CERT: {ssl_ca_cert}")
+    logger.info(f"KAFKA_SSL_CERT: {ssl_cert}")
+    logger.info(f"KAFKA_SSL_KEY: {ssl_key}")
+
+    # Verify SSL files exist
+    if ssl_ca_cert:
+        logger.info(f"  CA cert exists: {os.path.exists(ssl_ca_cert)}")
+    if ssl_cert:
+        logger.info(f"  Client cert exists: {os.path.exists(ssl_cert)}")
+    if ssl_key:
+        logger.info(f"  Client key exists: {os.path.exists(ssl_key)}")
 
     kafka_config = {
         'bootstrap_servers': bootstrap_servers,
-        'ssl_ca_cert': os.getenv("KAFKA_SSL_CA_CERT"),
-        'ssl_cert': os.getenv("KAFKA_SSL_CERT"),
-        'ssl_key': os.getenv("KAFKA_SSL_KEY"),
+        'ssl_ca_cert': ssl_ca_cert,
+        'ssl_cert': ssl_cert,
+        'ssl_key': ssl_key,
     }
 
     # Create connector
