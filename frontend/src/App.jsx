@@ -64,8 +64,8 @@ export default function App() {
   const [showPorts, setShowPorts] = useState(true)
   const [showCables, setShowCables] = useState(true)
 
-  // Trail time horizon in hours (0 = none, 72 = max)
-  const [trailHorizonHours, setTrailHorizonHours] = useState(24)
+  // Trail time horizon in hours (0 = none, 168 = 7 days max)
+  const [trailHorizonHours, setTrailHorizonHours] = useState(72)
 
   // Infrastructure type filter
   const [enabledInfraTypes, setEnabledInfraTypes] = useState(new Set(ALL_INFRASTRUCTURE_TYPES))
@@ -467,18 +467,18 @@ export default function App() {
                     <input
                       type="range"
                       min="0"
-                      max="72"
+                      max="168"
                       step="1"
                       value={trailHorizonHours}
                       onChange={(e) => setTrailHorizonHours(parseInt(e.target.value))}
                       className="w-full h-1.5 bg-maritime-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                     />
                     <div className="flex justify-between text-[10px] text-maritime-500">
-                      <span>None</span>
-                      <span>12h</span>
-                      <span>24h</span>
-                      <span>48h</span>
-                      <span>72h</span>
+                      <span>0</span>
+                      <span>1d</span>
+                      <span>3d</span>
+                      <span>5d</span>
+                      <span>7d</span>
                     </div>
                   </div>
                 )}

@@ -527,6 +527,18 @@ export const BALTIC_CABLE_GEOFENCES = [
       [24.2, 60.0], [24.0, 59.85], [23.8, 59.7], [24.0, 59.55],
       [24.3, 59.5], [24.6, 59.55], [24.5, 59.7], [24.4, 59.85], [24.4, 60.0], [24.2, 60.0]
     ]
+  },
+  {
+    id: 'CABLE-LT-LV-FIBER',
+    name: 'LT-LV Fiber Optic',
+    subtitle: 'Sventoji → Liepaja (DAMAGED Jan 3)',
+    type: 'telecommunications',
+    severity: 'CRITICAL',
+    color: [168, 85, 247], // Purple
+    coordinates: [
+      [20.9, 56.55], [20.85, 56.4], [20.9, 56.25], [20.95, 56.1], [21.0, 55.95],
+      [21.2, 55.95], [21.15, 56.1], [21.1, 56.25], [21.05, 56.4], [21.1, 56.55], [20.9, 56.55]
+    ]
   }
 ]
 
