@@ -97,10 +97,10 @@ async def health():
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
 # Vessel trails: store last N positions per vessel for trail visualization
-# Increased to 500 to support 72h of history (assuming ~7 updates/hour average)
-vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
-TRAIL_MAX_POINTS = 500  # Max trail points per vessel
-TRAIL_LOOKBACK_HOURS = 72  # How far back to seek on startup
+# Increased to 1000 to support 7 days of history
+vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+TRAIL_MAX_POINTS = 1000  # Max trail points per vessel (increased for 7 days)
+TRAIL_LOOKBACK_HOURS = 168  # How far back to seek on startup (7 days)
 alerts_list: list = []
 MAX_ALERTS = 1000  # Max alerts to store in memory
 
@@ -120,7 +120,7 @@ def get_kafka_config(group_id: str) -> dict:
 
 def consume_vessels_thread():
     """Background thread to consume AIS positions from Kafka."""
-    config = get_kafka_config('ais-guardian-api-vessels-v3')
+    config = get_kafka_config('ais-guardian-api-vessels-v4')
     print(f"Vessel consumer config: bootstrap={config['bootstrap.servers']}, ca={config['ssl.ca.location']}", flush=True)
     consumer = Consumer(config)
 
