@@ -13,9 +13,11 @@ import os
 import tempfile
 import threading
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional
+import uuid
 
 from confluent_kafka import Consumer, KafkaError, TopicPartition
 from dotenv import load_dotenv
@@ -104,6 +106,214 @@ TRAIL_LOOKBACK_HOURS = 24  # How far back to seek on startup
 TRAIL_TTL_SECONDS = 72 * 3600  # Keep trails for 72 hours in Valkey
 alerts_list: list = []
 MAX_ALERTS = 1000  # Max alerts to store in memory
+
+# =============================================================================
+# INCIDENT CORRELATION ENGINE
+# Groups related alerts into unified incidents for better threat assessment
+# =============================================================================
+
+@dataclass
+class Incident:
+    """A correlated incident grouping multiple related alerts."""
+    id: str
+    mmsi: str
+    ship_name: str
+    severity: str  # CRITICAL, HIGH, MEDIUM, LOW
+    status: str  # ACTIVE, RESOLVED, MONITORING
+    title: str
+    description: str
+    alert_types: List[str] = field(default_factory=list)
+    alerts: List[dict] = field(default_factory=list)
+    first_alert_time: str = ""
+    last_alert_time: str = ""
+    location: dict = field(default_factory=dict)  # {lat, lon}
+    risk_score: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+# Incident storage
+incidents: Dict[str, Incident] = {}  # id -> Incident
+vessel_incidents: Dict[str, str] = {}  # mmsi -> active incident id
+MAX_INCIDENTS = 500
+INCIDENT_WINDOW_MINUTES = 30  # Group alerts within this window
+
+# Severity weights for different alert types (higher = more severe)
+ALERT_SEVERITY_WEIGHTS = {
+    'CABLE_PROXIMITY': 90,
+    'ANCHOR_DRAGGING': 95,
+    'SANCTIONS_MATCH': 85,
+    'AIS_SPOOFING': 80,
+    'DARK_EVENT': 70,
+    'GEOFENCE_VIOLATION': 60,
+    'RENDEZVOUS': 50,
+    'CONVOY': 40,
+    'FISHING_PATTERN': 45,
+    'HIGH_RISK_SCORE': 75,
+}
+
+# Alert type relationships (types that often occur together in an incident)
+RELATED_ALERT_TYPES = {
+    'DARK_EVENT': ['CABLE_PROXIMITY', 'AIS_SPOOFING', 'GEOFENCE_VIOLATION'],
+    'CABLE_PROXIMITY': ['ANCHOR_DRAGGING', 'DARK_EVENT'],
+    'ANCHOR_DRAGGING': ['CABLE_PROXIMITY'],
+    'AIS_SPOOFING': ['DARK_EVENT', 'SANCTIONS_MATCH'],
+    'SANCTIONS_MATCH': ['DARK_EVENT', 'AIS_SPOOFING', 'RENDEZVOUS'],
+    'RENDEZVOUS': ['SANCTIONS_MATCH', 'DARK_EVENT'],
+}
+
+def calculate_incident_severity(alert_types: List[str]) -> tuple:
+    """Calculate incident severity and risk score from alert types."""
+    if not alert_types:
+        return 'LOW', 0
+
+    total_score = sum(ALERT_SEVERITY_WEIGHTS.get(t, 30) for t in alert_types)
+    # Bonus for multiple correlated alert types
+    if len(alert_types) >= 3:
+        total_score = int(total_score * 1.3)
+    elif len(alert_types) >= 2:
+        total_score = int(total_score * 1.15)
+
+    # Cap at 100
+    risk_score = min(100, total_score // len(alert_types) if alert_types else 0)
+
+    if risk_score >= 85 or 'ANCHOR_DRAGGING' in alert_types:
+        severity = 'CRITICAL'
+    elif risk_score >= 70 or 'CABLE_PROXIMITY' in alert_types:
+        severity = 'HIGH'
+    elif risk_score >= 50:
+        severity = 'MEDIUM'
+    else:
+        severity = 'LOW'
+
+    return severity, risk_score
+
+def generate_incident_title(alert_types: List[str], ship_name: str) -> str:
+    """Generate a human-readable incident title."""
+    if 'ANCHOR_DRAGGING' in alert_types and 'CABLE_PROXIMITY' in alert_types:
+        return f"Potential Cable Threat: {ship_name} dragging anchor near infrastructure"
+    elif 'ANCHOR_DRAGGING' in alert_types:
+        return f"Anchor Dragging Alert: {ship_name}"
+    elif 'CABLE_PROXIMITY' in alert_types and 'DARK_EVENT' in alert_types:
+        return f"Suspicious Activity: {ship_name} went dark near cable zone"
+    elif 'CABLE_PROXIMITY' in alert_types:
+        return f"Cable Zone Intrusion: {ship_name}"
+    elif 'SANCTIONS_MATCH' in alert_types:
+        return f"Sanctioned Vessel Activity: {ship_name}"
+    elif 'AIS_SPOOFING' in alert_types:
+        return f"Potential AIS Spoofing: {ship_name}"
+    elif 'DARK_EVENT' in alert_types:
+        return f"AIS Transmission Gap: {ship_name}"
+    elif 'RENDEZVOUS' in alert_types:
+        return f"Ship-to-Ship Meeting: {ship_name}"
+    else:
+        return f"Maritime Alert: {ship_name}"
+
+def generate_incident_description(incident: Incident) -> str:
+    """Generate a detailed incident description."""
+    alert_count = len(incident.alerts)
+    duration_text = ""
+
+    if incident.first_alert_time and incident.last_alert_time:
+        try:
+            first = datetime.fromisoformat(incident.first_alert_time.replace('Z', '+00:00'))
+            last = datetime.fromisoformat(incident.last_alert_time.replace('Z', '+00:00'))
+            duration = last - first
+            if duration.total_seconds() > 3600:
+                duration_text = f" over {duration.total_seconds() / 3600:.1f} hours"
+            elif duration.total_seconds() > 60:
+                duration_text = f" over {duration.total_seconds() / 60:.0f} minutes"
+        except:
+            pass
+
+    types_text = ", ".join(incident.alert_types)
+    return f"{alert_count} related alerts ({types_text}){duration_text}"
+
+def correlate_alert(alert: dict) -> Optional[str]:
+    """
+    Correlate an incoming alert with existing incidents or create a new one.
+    Returns the incident ID if correlated/created.
+    """
+    mmsi = alert.get('mmsi', '')
+    if not mmsi:
+        return None
+
+    alert_type = alert.get('alert_type', 'UNKNOWN')
+    alert_time = alert.get('timestamp', datetime.now(timezone.utc).isoformat())
+    ship_name = alert.get('ship_name', alert.get('details', {}).get('ship_name', f'MMSI {mmsi}'))
+    lat = alert.get('latitude', alert.get('details', {}).get('latitude', 0))
+    lon = alert.get('longitude', alert.get('details', {}).get('longitude', 0))
+
+    now = datetime.now(timezone.utc)
+
+    # Check if vessel has an active incident
+    active_incident_id = vessel_incidents.get(mmsi)
+    if active_incident_id and active_incident_id in incidents:
+        incident = incidents[active_incident_id]
+
+        # Check if incident is still within time window
+        try:
+            last_time = datetime.fromisoformat(incident.last_alert_time.replace('Z', '+00:00'))
+            if (now - last_time) < timedelta(minutes=INCIDENT_WINDOW_MINUTES):
+                # Add to existing incident
+                if alert_type not in incident.alert_types:
+                    incident.alert_types.append(alert_type)
+                incident.alerts.append(alert)
+                incident.last_alert_time = alert_time
+                incident.updated_at = now.isoformat()
+                if lat and lon:
+                    incident.location = {'lat': lat, 'lon': lon}
+
+                # Recalculate severity
+                incident.severity, incident.risk_score = calculate_incident_severity(incident.alert_types)
+                incident.title = generate_incident_title(incident.alert_types, ship_name)
+                incident.description = generate_incident_description(incident)
+
+                return active_incident_id
+        except:
+            pass
+
+    # Create new incident
+    incident_id = str(uuid.uuid4())[:8]
+    incident = Incident(
+        id=incident_id,
+        mmsi=mmsi,
+        ship_name=ship_name,
+        severity='MEDIUM',
+        status='ACTIVE',
+        title=generate_incident_title([alert_type], ship_name),
+        description='',
+        alert_types=[alert_type],
+        alerts=[alert],
+        first_alert_time=alert_time,
+        last_alert_time=alert_time,
+        location={'lat': lat, 'lon': lon} if lat and lon else {},
+        risk_score=ALERT_SEVERITY_WEIGHTS.get(alert_type, 30),
+        created_at=now.isoformat(),
+        updated_at=now.isoformat(),
+    )
+    incident.severity, incident.risk_score = calculate_incident_severity(incident.alert_types)
+    incident.description = generate_incident_description(incident)
+
+    incidents[incident_id] = incident
+    vessel_incidents[mmsi] = incident_id
+
+    # Cleanup old incidents if we have too many
+    if len(incidents) > MAX_INCIDENTS:
+        # Remove oldest resolved incidents first
+        sorted_incidents = sorted(
+            incidents.items(),
+            key=lambda x: (x[1].status != 'RESOLVED', x[1].updated_at)
+        )
+        for old_id, old_incident in sorted_incidents[:len(incidents) - MAX_INCIDENTS]:
+            del incidents[old_id]
+            if vessel_incidents.get(old_incident.mmsi) == old_id:
+                del vessel_incidents[old_incident.mmsi]
+
+    return incident_id
+
+# =============================================================================
+# END INCIDENT CORRELATION ENGINE
+# =============================================================================
 
 # Valkey (Redis-compatible) connection for persistent trail storage
 valkey_client = None
@@ -387,7 +597,14 @@ def consume_alerts_thread():
 
             data = json.loads(msg.value())
             msg_count += 1
-            print(f"Alerts consumer: received alert #{msg_count} - {data.get('alert_type', 'unknown')}", flush=True)
+            alert_type = data.get('alert_type', 'unknown')
+            print(f"Alerts consumer: received alert #{msg_count} - {alert_type}", flush=True)
+
+            # Correlate alert into incidents
+            incident_id = correlate_alert(data)
+            if incident_id:
+                data['incident_id'] = incident_id
+
             alerts_list.insert(0, data)
             # Keep only last N alerts
             if len(alerts_list) > MAX_ALERTS:
@@ -509,7 +726,128 @@ async def get_stats():
     return {
         "total_vessels": len(vessel_state),
         "total_alerts": len(alerts_list),
+        "total_incidents": len(incidents),
+        "active_incidents": sum(1 for i in incidents.values() if i.status == 'ACTIVE'),
         "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/api/incidents")
+async def get_incidents(
+    severity: Optional[str] = Query(None, description="Filter by severity: CRITICAL, HIGH, MEDIUM, LOW"),
+    status: Optional[str] = Query(None, description="Filter by status: ACTIVE, RESOLVED, MONITORING"),
+    limit: int = Query(50, le=200),
+):
+    """
+    Get correlated incidents.
+
+    Incidents group related alerts from the same vessel within a time window,
+    providing a unified view of potential threats.
+    """
+    incident_list = list(incidents.values())
+
+    # Apply filters
+    if severity:
+        incident_list = [i for i in incident_list if i.severity == severity.upper()]
+    if status:
+        incident_list = [i for i in incident_list if i.status == status.upper()]
+
+    # Sort by severity (CRITICAL first), then by updated_at (most recent first)
+    severity_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+    incident_list.sort(key=lambda x: (severity_order.get(x.severity, 4), -hash(x.updated_at)))
+
+    # Convert to dict for JSON serialization
+    result = []
+    for incident in incident_list[:limit]:
+        result.append({
+            'id': incident.id,
+            'mmsi': incident.mmsi,
+            'ship_name': incident.ship_name,
+            'severity': incident.severity,
+            'status': incident.status,
+            'title': incident.title,
+            'description': incident.description,
+            'alert_types': incident.alert_types,
+            'alert_count': len(incident.alerts),
+            'first_alert_time': incident.first_alert_time,
+            'last_alert_time': incident.last_alert_time,
+            'location': incident.location,
+            'risk_score': incident.risk_score,
+            'created_at': incident.created_at,
+            'updated_at': incident.updated_at,
+        })
+
+    return {
+        "incidents": result,
+        "count": len(result),
+        "total": len(incidents),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/api/incidents/{incident_id}")
+async def get_incident(incident_id: str):
+    """
+    Get a single incident with full alert timeline.
+
+    Returns the incident details including all correlated alerts
+    in chronological order for incident investigation.
+    """
+    incident = incidents.get(incident_id)
+    if not incident:
+        return {"error": "Incident not found"}
+
+    # Sort alerts by timestamp for timeline view
+    sorted_alerts = sorted(
+        incident.alerts,
+        key=lambda x: x.get('timestamp', ''),
+    )
+
+    return {
+        'id': incident.id,
+        'mmsi': incident.mmsi,
+        'ship_name': incident.ship_name,
+        'severity': incident.severity,
+        'status': incident.status,
+        'title': incident.title,
+        'description': incident.description,
+        'alert_types': incident.alert_types,
+        'alerts': sorted_alerts,  # Full alert timeline
+        'alert_count': len(incident.alerts),
+        'first_alert_time': incident.first_alert_time,
+        'last_alert_time': incident.last_alert_time,
+        'location': incident.location,
+        'risk_score': incident.risk_score,
+        'created_at': incident.created_at,
+        'updated_at': incident.updated_at,
+        # Include vessel info if available
+        'vessel': vessel_state.get(incident.mmsi, {}),
+    }
+
+
+@app.get("/api/vessel/{mmsi}/incidents")
+async def get_vessel_incidents(mmsi: str):
+    """Get all incidents for a specific vessel."""
+    vessel_incident_list = [
+        {
+            'id': i.id,
+            'severity': i.severity,
+            'status': i.status,
+            'title': i.title,
+            'alert_types': i.alert_types,
+            'alert_count': len(i.alerts),
+            'risk_score': i.risk_score,
+            'created_at': i.created_at,
+            'updated_at': i.updated_at,
+        }
+        for i in incidents.values()
+        if i.mmsi == mmsi
+    ]
+
+    return {
+        "mmsi": mmsi,
+        "incidents": vessel_incident_list,
+        "count": len(vessel_incident_list),
     }
 
 

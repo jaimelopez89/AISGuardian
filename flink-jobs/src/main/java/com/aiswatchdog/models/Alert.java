@@ -24,7 +24,8 @@ public class Alert implements Serializable {
         CABLE_PROXIMITY,
         LOITERING,
         CONVOY,
-        ANCHOR_DRAGGING
+        ANCHOR_DRAGGING,
+        TRAJECTORY_PREDICTION  // Predictive alert for approaching cable zones
     }
 
     public enum Severity {

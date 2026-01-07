@@ -10,6 +10,7 @@ import com.aiswatchdog.detectors.GeofenceViolationDetector;
 import com.aiswatchdog.detectors.LoiteringDetector;
 import com.aiswatchdog.detectors.RendezvousDetector;
 import com.aiswatchdog.detectors.ShadowFleetDetector;
+import com.aiswatchdog.detectors.TrajectoryPredictionDetector;
 import com.aiswatchdog.detectors.VesselRiskScorer;
 import com.aiswatchdog.models.AISPosition;
 import com.aiswatchdog.models.Alert;
@@ -248,13 +249,21 @@ public class AISWatchdogJob {
                 .process(new CableProximityDetector())
                 .name("Cable Proximity Detector");
 
+        // ========== DETECTOR 5b: Trajectory Prediction (Predictive Alerts) ==========
+        // Predicts vessel trajectory and alerts BEFORE they enter cable zones
+        // Competition differentiator: early warning system vs reactive alerts
+        SingleOutputStreamOperator<Alert> trajectoryAlerts = keyedPositions
+                .connect(broadcastGeofences)
+                .process(new TrajectoryPredictionDetector())
+                .name("Trajectory Prediction Detector");
+
         // ========== DETECTOR 6: Loitering Detection ==========
-        // Detects vessels staying in a small area for extended periods
-        // Can indicate surveillance, illegal fishing, or preparation for ship-to-ship transfer
-        // Parameters: radiusNM=0.5, minDurationMinutes=45, maxHistoryMinutes=120, checkIntervalMs=60000
-        SingleOutputStreamOperator<Alert> loiteringAlerts = keyedPositions
-                .process(new LoiteringDetector(0.5, 45, 120, 60000))
-                .name("Loitering Detector");
+        // DISABLED: CableProximityDetector already handles stopped/slow vessels near critical infrastructure
+        // Generic loitering detection was causing 86% of all alerts (false positives)
+        // Keeping CableProximityDetector as the focused infrastructure-aware alternative
+        // SingleOutputStreamOperator<Alert> loiteringAlerts = keyedPositions
+        //         .process(new LoiteringDetector(0.5, 45, 120, 60000))
+        //         .name("Loitering Detector");
 
         // ========== DETECTOR 7: AIS Spoofing Detection ==========
         // Detects potentially spoofed AIS signals
@@ -303,7 +312,8 @@ public class AISWatchdogJob {
                 .union(rendezvousAlerts)
                 .union(fishingAlerts)
                 .union(cableAlerts)
-                .union(loiteringAlerts)
+                .union(trajectoryAlerts)  // Predictive alerts for approaching vessels
+                // loiteringAlerts disabled - CableProximityDetector handles infrastructure cases
                 .union(spoofingAlerts)
                 .union(convoyAlerts)
                 .union(anchorDragAlerts)
