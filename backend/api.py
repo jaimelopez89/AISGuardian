@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import redis
 
 # Load environment variables
 env_path = Path('.env')
@@ -96,12 +97,126 @@ async def health():
 
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
-# Vessel trails: store last N positions per vessel for trail visualization
+# Vessel trails: in-memory cache backed by Valkey
 vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 TRAIL_MAX_POINTS = 500  # Max trail points per vessel
 TRAIL_LOOKBACK_HOURS = 24  # How far back to seek on startup
+TRAIL_TTL_SECONDS = 72 * 3600  # Keep trails for 72 hours in Valkey
 alerts_list: list = []
 MAX_ALERTS = 1000  # Max alerts to store in memory
+
+# Valkey (Redis-compatible) connection for persistent trail storage
+valkey_client = None
+
+def setup_valkey():
+    """Setup Valkey connection for persistent trail storage."""
+    global valkey_client
+    valkey_host = os.getenv('VALKEY_HOST')
+    valkey_port = os.getenv('VALKEY_PORT', '28738')
+    valkey_password = os.getenv('VALKEY_PASSWORD')
+
+    if valkey_host and valkey_password:
+        try:
+            valkey_client = redis.Redis(
+                host=valkey_host,
+                port=int(valkey_port),
+                password=valkey_password,
+                ssl=True,
+                ssl_cert_reqs=None,
+                decode_responses=True
+            )
+            # Test connection
+            valkey_client.ping()
+            print(f"Connected to Valkey at {valkey_host}:{valkey_port}", flush=True)
+
+            # Load existing trails count
+            keys = valkey_client.keys('trail:*')
+            print(f"Found {len(keys)} existing vessel trails in Valkey", flush=True)
+            return True
+        except Exception as e:
+            print(f"Failed to connect to Valkey: {e}", flush=True)
+            valkey_client = None
+            return False
+    else:
+        print("Valkey not configured (VALKEY_HOST/VALKEY_PASSWORD not set)", flush=True)
+        return False
+
+def save_trail_point(mmsi: str, lat: float, lon: float, ts: str):
+    """Save a trail point to Valkey."""
+    if not valkey_client:
+        return
+    try:
+        # Parse timestamp to get score
+        score = datetime.now(timezone.utc).timestamp()
+        if ts:
+            try:
+                # Handle various timestamp formats
+                ts_clean = ts.replace(' UTC', '').strip()
+                if 'T' in ts_clean:
+                    dt = datetime.fromisoformat(ts_clean.replace('Z', '+00:00'))
+                else:
+                    parts = ts_clean.rsplit(' ', 1)
+                    dt_str = parts[0][:26] if '.' in parts[0] else parts[0][:19]
+                    fmt = '%Y-%m-%d %H:%M:%S.%f' if '.' in dt_str else '%Y-%m-%d %H:%M:%S'
+                    dt = datetime.strptime(dt_str, fmt)
+                score = dt.timestamp()
+            except:
+                pass
+
+        key = f"trail:{mmsi}"
+        point = json.dumps({'lat': lat, 'lon': lon, 'ts': ts})
+        valkey_client.zadd(key, {point: score})
+
+        # Set TTL on the key (refresh it)
+        valkey_client.expire(key, TRAIL_TTL_SECONDS)
+
+        # Trim old points (keep last TRAIL_MAX_POINTS)
+        valkey_client.zremrangebyrank(key, 0, -(TRAIL_MAX_POINTS + 1))
+    except Exception as e:
+        pass  # Don't crash on Valkey errors
+
+def get_trails_from_valkey(mmsi: str = None) -> List[dict]:
+    """Get trails from Valkey."""
+    if not valkey_client:
+        return []
+
+    try:
+        if mmsi:
+            keys = [f"trail:{mmsi}"]
+        else:
+            keys = valkey_client.keys('trail:*')
+
+        trails = []
+        for key in keys:
+            vessel_mmsi = key.replace('trail:', '') if isinstance(key, str) else key.decode().replace('trail:', '')
+            points = valkey_client.zrange(key, 0, -1, withscores=True)
+
+            if len(points) >= 2:
+                coordinates = []
+                timestamps = []
+                for point_json, score in points:
+                    try:
+                        point = json.loads(point_json)
+                        coordinates.append([point['lon'], point['lat']])
+                        timestamps.append(point.get('ts', ''))
+                    except:
+                        pass
+
+                if len(coordinates) >= 2:
+                    trails.append({
+                        'mmsi': vessel_mmsi,
+                        'coordinates': coordinates,
+                        'timestamps': timestamps,
+                        'point_count': len(coordinates)
+                    })
+
+        return trails
+    except Exception as e:
+        print(f"Error getting trails from Valkey: {e}", flush=True)
+        return []
+
+# Initialize Valkey on module load
+setup_valkey()
 
 # Kafka consumer configuration
 def get_kafka_config(group_id: str) -> dict:
@@ -196,6 +311,8 @@ def consume_vessels_thread():
                         abs(trail[-1][1] - lon) > 0.0001
                     ):
                         trail.append((lat, lon, ts))
+                        # Also save to Valkey for persistence
+                        save_trail_point(mmsi, lat, lon, ts)
 
         except Exception as e:
             print(f"Error consuming vessel: {e}", flush=True)
@@ -309,7 +426,25 @@ async def get_trails(mmsi: Optional[str] = Query(None)):
 
     Returns trails as GeoJSON LineStrings for easy mapping.
     If mmsi is provided, returns only that vessel's trail.
+    Reads from Valkey if available, otherwise falls back to in-memory.
     """
+    # Try Valkey first for persistent trails
+    if valkey_client:
+        trails = get_trails_from_valkey(mmsi)
+        if trails:
+            # Enrich with vessel info
+            for trail in trails:
+                vessel = vessel_state.get(trail['mmsi'], {})
+                trail['ship_name'] = vessel.get('ship_name', '')
+                trail['ship_type'] = vessel.get('ship_type', 0)
+            return {
+                "trails": trails,
+                "count": len(trails),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "source": "valkey"
+            }
+
+    # Fall back to in-memory trails
     if mmsi:
         # Single vessel trail
         trail = vessel_trails.get(mmsi, [])
