@@ -218,6 +218,42 @@ def get_trails_from_valkey(mmsi: str = None) -> List[dict]:
 # Initialize Valkey on module load
 setup_valkey()
 
+def load_trails_from_valkey():
+    """Load existing trails from Valkey into memory on startup."""
+    if not valkey_client:
+        return
+
+    try:
+        print("Loading trails from Valkey into memory...", flush=True)
+        keys = valkey_client.keys('trail:*')
+        loaded = 0
+        total_points = 0
+
+        for key in keys:
+            mmsi = key.replace('trail:', '') if isinstance(key, str) else key.decode().replace('trail:', '')
+            points = valkey_client.zrange(key, 0, -1, withscores=True)
+
+            if points:
+                trail = vessel_trails[mmsi]
+                for point_json, score in points:
+                    try:
+                        point = json.loads(point_json)
+                        trail.append((point['lat'], point['lon'], point.get('ts', '')))
+                        total_points += 1
+                    except:
+                        pass
+                loaded += 1
+
+            if loaded % 500 == 0:
+                print(f"  Loaded {loaded}/{len(keys)} vessels...", flush=True)
+
+        print(f"Loaded {loaded} vessel trails ({total_points} points) from Valkey", flush=True)
+    except Exception as e:
+        print(f"Error loading trails from Valkey: {e}", flush=True)
+
+# Load trails from Valkey on startup
+load_trails_from_valkey()
+
 # Kafka consumer configuration
 def get_kafka_config(group_id: str) -> dict:
     return {
@@ -426,25 +462,8 @@ async def get_trails(mmsi: Optional[str] = Query(None)):
 
     Returns trails as GeoJSON LineStrings for easy mapping.
     If mmsi is provided, returns only that vessel's trail.
-    Reads from Valkey if available, otherwise falls back to in-memory.
+    Serves from in-memory cache (fast), Valkey is used for persistence only.
     """
-    # Try Valkey first for persistent trails
-    if valkey_client:
-        trails = get_trails_from_valkey(mmsi)
-        if trails:
-            # Enrich with vessel info
-            for trail in trails:
-                vessel = vessel_state.get(trail['mmsi'], {})
-                trail['ship_name'] = vessel.get('ship_name', '')
-                trail['ship_type'] = vessel.get('ship_type', 0)
-            return {
-                "trails": trails,
-                "count": len(trails),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": "valkey"
-            }
-
-    # Fall back to in-memory trails
     if mmsi:
         # Single vessel trail
         trail = vessel_trails.get(mmsi, [])
