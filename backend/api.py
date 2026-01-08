@@ -102,15 +102,15 @@ async def health():
 vessel_state: Dict[str, dict] = {}
 vessel_last_seen: Dict[str, float] = {}  # MMSI -> timestamp for TTL eviction
 # Vessel trails: in-memory cache backed by Valkey
-vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
-TRAIL_MAX_POINTS = 500  # Max trail points per vessel
+vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=200))
+TRAIL_MAX_POINTS = 200  # Max trail points per vessel (reduced from 500)
 TRAIL_LOOKBACK_HOURS = 24  # How far back to seek on startup
 TRAIL_TTL_SECONDS = 72 * 3600  # Keep trails for 72 hours in Valkey
 
 # Memory limits to prevent unbounded growth
-MAX_VESSELS_IN_MEMORY = 15000  # Max vessels to keep in memory
-VESSEL_TTL_HOURS = 24  # Remove vessels not seen in this time
-CLEANUP_INTERVAL_SECONDS = 300  # Run cleanup every 5 minutes
+MAX_VESSELS_IN_MEMORY = 10000  # Max vessels to keep in memory
+VESSEL_TTL_HOURS = 6  # Remove vessels not seen in this time (reduced from 24h)
+CLEANUP_INTERVAL_SECONDS = 120  # Run cleanup every 2 minutes
 _last_cleanup_time = 0.0
 
 # Alerts storage - using deque for O(1) append/pop
@@ -144,7 +144,8 @@ class Incident:
 # Incident storage
 incidents: Dict[str, Incident] = {}  # id -> Incident
 vessel_incidents: Dict[str, str] = {}  # mmsi -> active incident id
-MAX_INCIDENTS = 500
+MAX_INCIDENTS = 200  # Reduced from 500 for memory
+MAX_ALERTS_PER_INCIDENT = 30  # Limit alerts stored per incident to prevent memory growth
 INCIDENT_WINDOW_MINUTES = 30  # Group alerts within this window
 
 # Severity weights for different alert types (higher = more severe)
@@ -267,7 +268,13 @@ def correlate_alert(alert: dict) -> Optional[str]:
                 # Add to existing incident
                 if alert_type not in incident.alert_types:
                     incident.alert_types.append(alert_type)
-                incident.alerts.append(alert)
+                # Limit alerts per incident to prevent memory growth
+                if len(incident.alerts) < MAX_ALERTS_PER_INCIDENT:
+                    incident.alerts.append(alert)
+                elif len(incident.alerts) == MAX_ALERTS_PER_INCIDENT:
+                    # Replace oldest alert to keep recent context
+                    incident.alerts.pop(0)
+                    incident.alerts.append(alert)
                 incident.last_alert_time = alert_time
                 incident.updated_at = now.isoformat()
                 if lat and lon:
@@ -483,8 +490,26 @@ def cleanup_stale_vessels():
             vessel_incidents.pop(mmsi, None)
             removed_count += 1
 
-    if removed_count > 0:
-        print(f"Cleanup: removed {removed_count} stale vessels, {len(vessel_state)} remaining", flush=True)
+    # Also cleanup old resolved incidents (older than 1 hour)
+    incident_cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    stale_incidents = []
+    for inc_id, inc in incidents.items():
+        if inc.status == 'RESOLVED':
+            try:
+                updated = datetime.fromisoformat(inc.updated_at.replace('Z', '+00:00'))
+                if updated < incident_cutoff:
+                    stale_incidents.append(inc_id)
+            except:
+                stale_incidents.append(inc_id)  # Remove if can't parse
+
+    for inc_id in stale_incidents:
+        inc = incidents.pop(inc_id, None)
+        if inc and vessel_incidents.get(inc.mmsi) == inc_id:
+            vessel_incidents.pop(inc.mmsi, None)
+
+    if removed_count > 0 or stale_incidents:
+        print(f"Cleanup: removed {removed_count} vessels, {len(stale_incidents)} incidents. "
+              f"Remaining: {len(vessel_state)} vessels, {len(incidents)} incidents", flush=True)
 
     return removed_count
 
@@ -793,6 +818,43 @@ async def get_stats():
         "total_alerts": len(alerts_list),
         "total_incidents": len(incidents),
         "active_incidents": sum(1 for i in incidents.values() if i.status == 'ACTIVE'),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/api/debug/memory")
+async def get_memory_stats():
+    """Get detailed memory statistics for debugging."""
+    import sys
+
+    # Calculate approximate memory usage
+    trail_points = sum(len(t) for t in vessel_trails.values())
+    incident_alerts = sum(len(i.alerts) for i in incidents.values())
+
+    return {
+        "vessels": {
+            "count": len(vessel_state),
+            "max": MAX_VESSELS_IN_MEMORY,
+            "ttl_hours": VESSEL_TTL_HOURS,
+        },
+        "trails": {
+            "vessel_count": len(vessel_trails),
+            "total_points": trail_points,
+            "max_points_per_vessel": TRAIL_MAX_POINTS,
+        },
+        "incidents": {
+            "count": len(incidents),
+            "max": MAX_INCIDENTS,
+            "total_alerts_stored": incident_alerts,
+            "max_alerts_per_incident": MAX_ALERTS_PER_INCIDENT,
+            "active": sum(1 for i in incidents.values() if i.status == 'ACTIVE'),
+            "resolved": sum(1 for i in incidents.values() if i.status == 'RESOLVED'),
+        },
+        "alerts": {
+            "count": len(alerts_list),
+            "max": MAX_ALERTS,
+        },
+        "cleanup_interval_seconds": CLEANUP_INTERVAL_SECONDS,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
