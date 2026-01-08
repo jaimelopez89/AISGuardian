@@ -78,7 +78,7 @@ export default function App() {
 
   // Investigation mode - focus on specific vessel
   const [focusVesselMmsi, setFocusVesselMmsi] = useState(null) // e.g., '375068000' for FITBURG
-  const [showInvestigationTrack, setShowInvestigationTrack] = useState(true)
+  const [showInvestigationTrack, setShowInvestigationTrack] = useState(false) // Hidden by default
 
   // Parse investigation track into usable format
   const investigationTrack = useMemo(() => {
