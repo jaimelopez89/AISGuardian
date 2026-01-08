@@ -1,5 +1,5 @@
 import React from 'react'
-import { Shield, Radio, AlertTriangle, Activity, Ship } from 'lucide-react'
+import { Radio, AlertTriangle, Activity, Ship } from 'lucide-react'
 
 /**
  * Application header with live stats.
@@ -10,9 +10,11 @@ export default function Header({ vesselCount, alertCount, isConnected, messagesP
       <div className="flex items-center justify-between">
         {/* Logo & Title */}
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-lg">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
+          <img
+            src="/aisguardian_favicon.png"
+            alt="AIS Guardian"
+            className="w-10 h-10"
+          />
           <div>
             <h1 className="text-xl font-bold text-white">AIS Guardian</h1>
             <p className="text-xs text-maritime-400">Baltic Sea Infrastructure Protection</p>
