@@ -781,19 +781,27 @@ async def get_trails(mmsi: Optional[str] = Query(None)):
 
     # All vessel trails - only return what's already in memory (active vessels)
     # This prevents loading all trails from Valkey which would defeat the purpose
+    # Take a snapshot of keys to avoid "dictionary changed size during iteration" error
     trails = []
-    for vessel_mmsi, trail in vessel_trails.items():
-        if len(trail) >= 2:  # Need at least 2 points for a line
-            coordinates = [[point[1], point[0]] for point in trail]  # GeoJSON is [lon, lat]
-            vessel = vessel_state.get(vessel_mmsi, {})
-            trails.append({
-                "mmsi": vessel_mmsi,
-                "coordinates": coordinates,
-                "timestamps": [point[2] for point in trail],
-                "point_count": len(coordinates),
-                "ship_name": vessel.get('ship_name', ''),
-                "ship_type": vessel.get('ship_type', 0)
-            })
+    try:
+        trail_keys = list(vessel_trails.keys())
+        for vessel_mmsi in trail_keys:
+            trail = vessel_trails.get(vessel_mmsi)
+            if trail and len(trail) >= 2:  # Need at least 2 points for a line
+                trail_snapshot = list(trail)  # Snapshot to avoid concurrent modification
+                coordinates = [[point[1], point[0]] for point in trail_snapshot]  # GeoJSON is [lon, lat]
+                vessel = vessel_state.get(vessel_mmsi, {})
+                trails.append({
+                    "mmsi": vessel_mmsi,
+                    "coordinates": coordinates,
+                    "timestamps": [point[2] for point in trail_snapshot],
+                    "point_count": len(coordinates),
+                    "ship_name": vessel.get('ship_name', ''),
+                    "ship_type": vessel.get('ship_type', 0)
+                })
+    except RuntimeError:
+        # Dictionary changed during iteration - return what we have
+        pass
 
     return {
         "trails": trails,
