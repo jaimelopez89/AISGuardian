@@ -5,6 +5,8 @@ import com.aiswatchdog.models.Alert;
 import com.aiswatchdog.utils.GeoUtils;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
 import org.apache.flink.util.Collector;
@@ -105,8 +107,17 @@ public class ConvoyDetector extends KeyedCoProcessFunction<String, AISPosition, 
 
     @Override
     public void open(Configuration parameters) throws Exception {
+        // Configure state TTL to automatically clean up stale entries
+        StateTtlConfig ttlConfig = StateTtlConfig
+                .newBuilder(Time.minutes(30))  // State expires after 30 minutes of no updates
+                .setUpdateType(StateTtlConfig.UpdateType.OnReadAndWrite)
+                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                .cleanupInRocksdbCompactFilter(1000)  // Cleanup during RocksDB compaction
+                .build();
+
         MapStateDescriptor<String, VesselTrack> descriptor =
                 new MapStateDescriptor<>("vesselTracks", String.class, VesselTrack.class);
+        descriptor.enableTimeToLive(ttlConfig);
         vesselTracksState = getRuntimeContext().getMapState(descriptor);
     }
 

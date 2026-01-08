@@ -5,6 +5,8 @@ import com.aiswatchdog.models.Alert;
 import com.aiswatchdog.utils.GeoUtils;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.Configuration;
@@ -148,21 +150,38 @@ public class RendezvousDetector
 
     @Override
     public void open(Configuration parameters) {
-        gridState = getRuntimeContext().getMapState(
+        // Configure state TTL to automatically clean up stale entries
+        StateTtlConfig gridTtlConfig = StateTtlConfig
+                .newBuilder(Time.minutes(15))  // Grid state expires after 15 minutes
+                .setUpdateType(StateTtlConfig.UpdateType.OnReadAndWrite)
+                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                .cleanupInRocksdbCompactFilter(1000)
+                .build();
+
+        StateTtlConfig encounterTtlConfig = StateTtlConfig
+                .newBuilder(Time.hours(2))  // Encounter state expires after 2 hours
+                .setUpdateType(StateTtlConfig.UpdateType.OnReadAndWrite)
+                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                .cleanupInRocksdbCompactFilter(1000)
+                .build();
+
+        MapStateDescriptor<String, Map<String, VesselEncounter>> gridDescriptor =
                 new MapStateDescriptor<>(
                         "grid-state",
                         BasicTypeInfo.STRING_TYPE_INFO,
                         TypeInformation.of(new org.apache.flink.api.common.typeinfo.TypeHint<Map<String, VesselEncounter>>() {})
-                )
-        );
+                );
+        gridDescriptor.enableTimeToLive(gridTtlConfig);
+        gridState = getRuntimeContext().getMapState(gridDescriptor);
 
-        encounterState = getRuntimeContext().getMapState(
+        MapStateDescriptor<String, EncounterState> encounterDescriptor =
                 new MapStateDescriptor<>(
                         "encounter-state",
                         BasicTypeInfo.STRING_TYPE_INFO,
                         TypeInformation.of(EncounterState.class)
-                )
-        );
+                );
+        encounterDescriptor.enableTimeToLive(encounterTtlConfig);
+        encounterState = getRuntimeContext().getMapState(encounterDescriptor);
 
         // Initialize port positions (Mediterranean major ports)
         // In production, load from reference data

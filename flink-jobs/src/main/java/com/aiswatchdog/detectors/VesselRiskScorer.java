@@ -5,8 +5,10 @@ import com.aiswatchdog.models.Alert;
 import com.aiswatchdog.utils.GeoUtils;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
@@ -93,24 +95,57 @@ public class VesselRiskScorer extends KeyedProcessFunction<String, AISPosition, 
 
     @Override
     public void open(Configuration parameters) throws Exception {
-        darkEventCountState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("darkEventCount", Integer.class));
-        russianPortVisitCountState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("russianPortVisitCount", Integer.class));
-        stsTransferCountState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("stsTransferCount", Integer.class));
-        erraticBehaviorCountState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("erraticBehaviorCount", Integer.class));
-        nameChangeCountState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("nameChangeCount", Integer.class));
-        highRiskFlagState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("highRiskFlag", Boolean.class));
-        currentRiskScoreState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("currentRiskScore", Integer.class));
-        lastRiskAlertTimeState = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("lastRiskAlertTime", Long.class));
-        russianPortVisitsState = getRuntimeContext().getMapState(
-                new MapStateDescriptor<>("russianPortVisits", String.class, Long.class));
+        // Configure state TTL for risk scoring state (7 days for vessel history)
+        StateTtlConfig riskTtlConfig = StateTtlConfig
+                .newBuilder(Time.days(7))  // Risk state expires after 7 days of no updates
+                .setUpdateType(StateTtlConfig.UpdateType.OnReadAndWrite)
+                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                .cleanupInRocksdbCompactFilter(1000)
+                .build();
+
+        // Configure TTL for port visit tracking (30 days)
+        StateTtlConfig portVisitTtlConfig = StateTtlConfig
+                .newBuilder(Time.days(30))  // Port visits expire after 30 days
+                .setUpdateType(StateTtlConfig.UpdateType.OnReadAndWrite)
+                .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                .cleanupInRocksdbCompactFilter(1000)
+                .build();
+
+        ValueStateDescriptor<Integer> darkEventDesc = new ValueStateDescriptor<>("darkEventCount", Integer.class);
+        darkEventDesc.enableTimeToLive(riskTtlConfig);
+        darkEventCountState = getRuntimeContext().getState(darkEventDesc);
+
+        ValueStateDescriptor<Integer> russianPortVisitDesc = new ValueStateDescriptor<>("russianPortVisitCount", Integer.class);
+        russianPortVisitDesc.enableTimeToLive(riskTtlConfig);
+        russianPortVisitCountState = getRuntimeContext().getState(russianPortVisitDesc);
+
+        ValueStateDescriptor<Integer> stsTransferDesc = new ValueStateDescriptor<>("stsTransferCount", Integer.class);
+        stsTransferDesc.enableTimeToLive(riskTtlConfig);
+        stsTransferCountState = getRuntimeContext().getState(stsTransferDesc);
+
+        ValueStateDescriptor<Integer> erraticBehaviorDesc = new ValueStateDescriptor<>("erraticBehaviorCount", Integer.class);
+        erraticBehaviorDesc.enableTimeToLive(riskTtlConfig);
+        erraticBehaviorCountState = getRuntimeContext().getState(erraticBehaviorDesc);
+
+        ValueStateDescriptor<Integer> nameChangeDesc = new ValueStateDescriptor<>("nameChangeCount", Integer.class);
+        nameChangeDesc.enableTimeToLive(riskTtlConfig);
+        nameChangeCountState = getRuntimeContext().getState(nameChangeDesc);
+
+        ValueStateDescriptor<Boolean> highRiskFlagDesc = new ValueStateDescriptor<>("highRiskFlag", Boolean.class);
+        highRiskFlagDesc.enableTimeToLive(riskTtlConfig);
+        highRiskFlagState = getRuntimeContext().getState(highRiskFlagDesc);
+
+        ValueStateDescriptor<Integer> currentRiskScoreDesc = new ValueStateDescriptor<>("currentRiskScore", Integer.class);
+        currentRiskScoreDesc.enableTimeToLive(riskTtlConfig);
+        currentRiskScoreState = getRuntimeContext().getState(currentRiskScoreDesc);
+
+        ValueStateDescriptor<Long> lastRiskAlertTimeDesc = new ValueStateDescriptor<>("lastRiskAlertTime", Long.class);
+        lastRiskAlertTimeDesc.enableTimeToLive(riskTtlConfig);
+        lastRiskAlertTimeState = getRuntimeContext().getState(lastRiskAlertTimeDesc);
+
+        MapStateDescriptor<String, Long> russianPortVisitsDesc = new MapStateDescriptor<>("russianPortVisits", String.class, Long.class);
+        russianPortVisitsDesc.enableTimeToLive(portVisitTtlConfig);
+        russianPortVisitsState = getRuntimeContext().getMapState(russianPortVisitsDesc);
     }
 
     @Override
