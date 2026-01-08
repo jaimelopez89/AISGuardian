@@ -619,8 +619,14 @@ def consume_vessels_thread():
                 lon = data.get('longitude')
                 ts = data.get('timestamp', datetime.now(timezone.utc).isoformat())
                 if lat and lon:
-                    # Only add if position changed significantly (avoid duplicates)
                     trail = vessel_trails[mmsi]
+
+                    # Hybrid loading: if trail is empty, try to load history from Valkey
+                    if len(trail) == 0:
+                        load_trail_from_valkey(mmsi)
+                        trail = vessel_trails[mmsi]  # Re-get after potential load
+
+                    # Only add if position changed significantly (avoid duplicates)
                     if len(trail) == 0 or (
                         abs(trail[-1][0] - lat) > 0.0001 or
                         abs(trail[-1][1] - lon) > 0.0001
