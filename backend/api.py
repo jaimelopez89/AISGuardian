@@ -503,15 +503,17 @@ def load_trail_from_valkey(mmsi: str) -> bool:
 
         if points:
             trail = vessel_trails[mmsi]
+            loaded_count = 0
             for point_json, score in points:
                 try:
                     point = json.loads(point_json)
                     trail.append((point['lat'], point['lon'], point.get('ts', '')))
-                except:
+                    loaded_count += 1
+                except Exception as parse_err:
                     pass
-            return True
+            return loaded_count > 0
     except Exception as e:
-        pass
+        print(f"Error loading trail from Valkey for {mmsi}: {e}", flush=True)
     return False
 
 
@@ -551,49 +553,18 @@ def consume_vessels_thread():
     print(f"Vessel consumer config: bootstrap={config['bootstrap.servers']}, ca={config['ssl.ca.location']}", flush=True)
     consumer = Consumer(config)
 
-    # Track partitions that need seeking
-    partitions_to_seek = []
-    seek_done = False
-
     def on_assign(c, partitions):
-        """Mark partitions for seeking after assignment."""
-        nonlocal partitions_to_seek
         print(f"Vessel consumer assigned: {partitions}", flush=True)
-        partitions_to_seek = list(partitions)
 
     consumer.subscribe(['ais-raw'], on_assign=on_assign)
-
-    print("Vessel consumer subscribed to ais-raw, waiting for partition assignment...", flush=True)
-
-    # Trigger partition assignment with initial poll
-    consumer.poll(1.0)
-    print("Initial poll done, partitions should be assigned", flush=True)
+    print("Vessel consumer subscribed to ais-raw (trail history loaded from Valkey)", flush=True)
 
     msg_count = 0
     poll_count = 0
-    seek_done = False
+    trails_loaded_count = 0  # Track how many trails we load from Valkey
 
     while True:
         try:
-            # Perform seek after first poll when partitions are ready
-            if partitions_to_seek and not seek_done:
-                print(f"Performing seek to {TRAIL_LOOKBACK_HOURS}h ago...", flush=True)
-                lookback_ms = int((datetime.now(timezone.utc).timestamp() - (TRAIL_LOOKBACK_HOURS * 3600)) * 1000)
-                tps_with_time = [TopicPartition(p.topic, p.partition, lookback_ms) for p in partitions_to_seek]
-
-                try:
-                    offsets = consumer.offsets_for_times(tps_with_time, timeout=10.0)
-                    for tp in offsets:
-                        if tp.offset >= 0:
-                            print(f"  Partition {tp.partition}: seeking to offset {tp.offset}", flush=True)
-                            consumer.seek(tp)
-                        else:
-                            print(f"  Partition {tp.partition}: no historical offset, using earliest", flush=True)
-                    seek_done = True
-                    print("Seek complete, starting consumption...", flush=True)
-                except Exception as e:
-                    print(f"Seek failed: {e}, will retry...", flush=True)
-
             poll_count += 1
             if poll_count <= 3 or poll_count % 30 == 0:
                 print(f"Vessel consumer poll #{poll_count}", flush=True)
@@ -623,8 +594,12 @@ def consume_vessels_thread():
 
                     # Hybrid loading: if trail is empty, try to load history from Valkey
                     if len(trail) == 0:
-                        load_trail_from_valkey(mmsi)
-                        trail = vessel_trails[mmsi]  # Re-get after potential load
+                        loaded = load_trail_from_valkey(mmsi)
+                        if loaded:
+                            trails_loaded_count += 1
+                            trail = vessel_trails[mmsi]  # Re-get after load
+                            if trails_loaded_count <= 10 or trails_loaded_count % 100 == 0:
+                                print(f"Loaded trail from Valkey for {mmsi}: {len(trail)} points (total loaded: {trails_loaded_count})", flush=True)
 
                     # Only add if position changed significantly (avoid duplicates)
                     if len(trail) == 0 or (
