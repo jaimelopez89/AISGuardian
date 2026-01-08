@@ -12,6 +12,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field, asdict
@@ -444,9 +445,8 @@ def cleanup_stale_vessels():
     Also enforces max vessel limit by removing oldest vessels.
     """
     global _last_cleanup_time
-    import time as time_module
 
-    now = time_module.time()
+    now = time.time()
 
     # Only run cleanup every CLEANUP_INTERVAL_SECONDS
     if now - _last_cleanup_time < CLEANUP_INTERVAL_SECONDS:
@@ -634,7 +634,6 @@ def consume_vessels_thread():
 
         except Exception as e:
             print(f"Error consuming vessel: {e}", flush=True)
-            import time
             time.sleep(1)
 
 
@@ -682,7 +681,6 @@ def consume_alerts_thread():
 
         except Exception as e:
             print(f"Error consuming alert: {e}", flush=True)
-            import time
             time.sleep(1)
 
 
