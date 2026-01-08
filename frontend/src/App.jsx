@@ -224,23 +224,38 @@ export default function App() {
     const cutoffTime = Date.now() - (trailHorizonHours * 60 * 60 * 1000)
 
     return rawTrails.map(trail => {
-      // Filter coordinates and timestamps based on time horizon
-      const filteredIndices = []
-      if (trail.timestamps) {
-        trail.timestamps.forEach((ts, idx) => {
-          const timestamp = new Date(ts).getTime()
-          if (timestamp >= cutoffTime) {
-            filteredIndices.push(idx)
-          }
-        })
+      // If no timestamps, return trail as-is (can't filter)
+      if (!trail.timestamps || trail.timestamps.length === 0) {
+        return trail.coordinates?.length >= 2 ? trail : null
       }
 
-      // If no timestamps or all points are within range, return as-is
-      if (!trail.timestamps || filteredIndices.length === trail.coordinates.length) {
+      // Filter coordinates and timestamps based on time horizon
+      const filteredIndices = []
+      let hasInvalidTimestamps = false
+
+      trail.timestamps.forEach((ts, idx) => {
+        const timestamp = new Date(ts).getTime()
+        if (isNaN(timestamp) || !ts) {
+          // Invalid timestamp - track this but include the point
+          hasInvalidTimestamps = true
+          filteredIndices.push(idx)
+        } else if (timestamp >= cutoffTime) {
+          filteredIndices.push(idx)
+        }
+      })
+
+      // If all timestamps are valid and within range, return as-is
+      if (filteredIndices.length === trail.coordinates.length) {
         return trail
       }
 
-      // Filter coordinates to only include recent points
+      // If we have invalid timestamps and no valid recent ones,
+      // return the full trail (can't reliably filter)
+      if (hasInvalidTimestamps && filteredIndices.length === 0) {
+        return trail.coordinates?.length >= 2 ? trail : null
+      }
+
+      // Filter coordinates to only include recent/valid points
       if (filteredIndices.length < 2) {
         return null // Not enough points for a trail
       }
