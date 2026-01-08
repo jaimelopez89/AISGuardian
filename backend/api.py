@@ -99,12 +99,21 @@ async def health():
 
 # In-memory vessel state (last known position for each MMSI)
 vessel_state: Dict[str, dict] = {}
+vessel_last_seen: Dict[str, float] = {}  # MMSI -> timestamp for TTL eviction
 # Vessel trails: in-memory cache backed by Valkey
 vessel_trails: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 TRAIL_MAX_POINTS = 500  # Max trail points per vessel
 TRAIL_LOOKBACK_HOURS = 24  # How far back to seek on startup
 TRAIL_TTL_SECONDS = 72 * 3600  # Keep trails for 72 hours in Valkey
-alerts_list: list = []
+
+# Memory limits to prevent unbounded growth
+MAX_VESSELS_IN_MEMORY = 15000  # Max vessels to keep in memory
+VESSEL_TTL_HOURS = 24  # Remove vessels not seen in this time
+CLEANUP_INTERVAL_SECONDS = 300  # Run cleanup every 5 minutes
+_last_cleanup_time = 0.0
+
+# Alerts storage - using deque for O(1) append/pop
+alerts_list: deque = deque(maxlen=1000)
 MAX_ALERTS = 1000  # Max alerts to store in memory
 
 # =============================================================================
@@ -428,41 +437,99 @@ def get_trails_from_valkey(mmsi: str = None) -> List[dict]:
 # Initialize Valkey on module load
 setup_valkey()
 
-def load_trails_from_valkey():
-    """Load existing trails from Valkey into memory on startup."""
+
+def cleanup_stale_vessels():
+    """
+    Remove vessels that haven't been seen recently to prevent memory growth.
+    Also enforces max vessel limit by removing oldest vessels.
+    """
+    global _last_cleanup_time
+    import time as time_module
+
+    now = time_module.time()
+
+    # Only run cleanup every CLEANUP_INTERVAL_SECONDS
+    if now - _last_cleanup_time < CLEANUP_INTERVAL_SECONDS:
+        return 0
+
+    _last_cleanup_time = now
+    removed_count = 0
+    cutoff_time = now - (VESSEL_TTL_HOURS * 3600)
+
+    # Remove vessels not seen within TTL
+    stale_mmsis = [
+        mmsi for mmsi, last_seen in vessel_last_seen.items()
+        if last_seen < cutoff_time
+    ]
+
+    for mmsi in stale_mmsis:
+        vessel_state.pop(mmsi, None)
+        vessel_trails.pop(mmsi, None)
+        vessel_last_seen.pop(mmsi, None)
+        # Also clean up from incident tracking
+        vessel_incidents.pop(mmsi, None)
+        removed_count += 1
+
+    # If still over limit, remove oldest vessels
+    if len(vessel_state) > MAX_VESSELS_IN_MEMORY:
+        # Sort by last seen time and remove oldest
+        sorted_vessels = sorted(vessel_last_seen.items(), key=lambda x: x[1])
+        to_remove = len(vessel_state) - MAX_VESSELS_IN_MEMORY + 1000  # Remove extra buffer
+
+        for mmsi, _ in sorted_vessels[:to_remove]:
+            vessel_state.pop(mmsi, None)
+            vessel_trails.pop(mmsi, None)
+            vessel_last_seen.pop(mmsi, None)
+            vessel_incidents.pop(mmsi, None)
+            removed_count += 1
+
+    if removed_count > 0:
+        print(f"Cleanup: removed {removed_count} stale vessels, {len(vessel_state)} remaining", flush=True)
+
+    return removed_count
+
+
+def load_trail_from_valkey(mmsi: str) -> bool:
+    """
+    Lazy-load a single vessel's trail from Valkey into memory.
+    Returns True if trail was loaded, False otherwise.
+    """
     if not valkey_client:
-        return
+        return False
 
     try:
-        print("Loading trails from Valkey into memory...", flush=True)
-        keys = valkey_client.keys('trail:*')
-        loaded = 0
-        total_points = 0
+        key = f"trail:{mmsi}"
+        points = valkey_client.zrange(key, 0, -1, withscores=True)
 
-        for key in keys:
-            mmsi = key.replace('trail:', '') if isinstance(key, str) else key.decode().replace('trail:', '')
-            points = valkey_client.zrange(key, 0, -1, withscores=True)
-
-            if points:
-                trail = vessel_trails[mmsi]
-                for point_json, score in points:
-                    try:
-                        point = json.loads(point_json)
-                        trail.append((point['lat'], point['lon'], point.get('ts', '')))
-                        total_points += 1
-                    except:
-                        pass
-                loaded += 1
-
-            if loaded % 500 == 0:
-                print(f"  Loaded {loaded}/{len(keys)} vessels...", flush=True)
-
-        print(f"Loaded {loaded} vessel trails ({total_points} points) from Valkey", flush=True)
+        if points:
+            trail = vessel_trails[mmsi]
+            for point_json, score in points:
+                try:
+                    point = json.loads(point_json)
+                    trail.append((point['lat'], point['lon'], point.get('ts', '')))
+                except:
+                    pass
+            return True
     except Exception as e:
-        print(f"Error loading trails from Valkey: {e}", flush=True)
+        pass
+    return False
 
-# Load trails from Valkey on startup
-load_trails_from_valkey()
+
+def get_active_vessel_count_from_valkey() -> int:
+    """Get count of vessels with trails in Valkey (for stats)."""
+    if not valkey_client:
+        return 0
+    try:
+        keys = valkey_client.keys('trail:*')
+        return len(keys)
+    except:
+        return 0
+
+
+# Log Valkey trail count on startup (but don't load into memory)
+if valkey_client:
+    trail_count = get_active_vessel_count_from_valkey()
+    print(f"Valkey contains {trail_count} vessel trails (lazy-loaded on demand)", flush=True)
 
 # Kafka consumer configuration
 def get_kafka_config(group_id: str) -> dict:
@@ -545,6 +612,8 @@ def consume_vessels_thread():
             mmsi = data.get('mmsi')
             if mmsi:
                 vessel_state[mmsi] = data
+                vessel_last_seen[mmsi] = time.time()  # Track for TTL eviction
+
                 # Store position in trail history
                 lat = data.get('latitude')
                 lon = data.get('longitude')
@@ -559,6 +628,9 @@ def consume_vessels_thread():
                         trail.append((lat, lon, ts))
                         # Also save to Valkey for persistence
                         save_trail_point(mmsi, lat, lon, ts)
+
+                # Periodically cleanup stale vessels to prevent memory growth
+                cleanup_stale_vessels()
 
         except Exception as e:
             print(f"Error consuming vessel: {e}", flush=True)
@@ -605,10 +677,8 @@ def consume_alerts_thread():
             if incident_id:
                 data['incident_id'] = incident_id
 
-            alerts_list.insert(0, data)
-            # Keep only last N alerts
-            if len(alerts_list) > MAX_ALERTS:
-                alerts_list.pop()
+            # Add to front of deque (O(1) operation, auto-evicts old items due to maxlen)
+            alerts_list.appendleft(data)
 
         except Exception as e:
             print(f"Error consuming alert: {e}", flush=True)
@@ -656,9 +726,11 @@ async def get_vessels(
 @app.get("/api/alerts")
 async def get_alerts(limit: int = Query(250, le=1000)):
     """Get recent alerts."""
+    # Convert deque to list for slicing and JSON serialization
+    alerts = list(alerts_list)[:limit]
     return {
-        "alerts": alerts_list[:limit],
-        "count": len(alerts_list[:limit]),
+        "alerts": alerts,
+        "count": len(alerts),
         "total": len(alerts_list),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
@@ -679,11 +751,16 @@ async def get_trails(mmsi: Optional[str] = Query(None)):
 
     Returns trails as GeoJSON LineStrings for easy mapping.
     If mmsi is provided, returns only that vessel's trail.
-    Serves from in-memory cache (fast), Valkey is used for persistence only.
+    Uses lazy-loading from Valkey - only loads requested trails into memory.
     """
     if mmsi:
-        # Single vessel trail
-        trail = vessel_trails.get(mmsi, [])
+        # Single vessel trail - lazy load from Valkey if not in memory
+        trail = vessel_trails.get(mmsi)
+        if trail is None or len(trail) < 2:
+            # Try to load from Valkey
+            load_trail_from_valkey(mmsi)
+            trail = vessel_trails.get(mmsi, [])
+
         if len(trail) < 2:
             return {"trails": [], "count": 0}
 
@@ -698,7 +775,8 @@ async def get_trails(mmsi: Optional[str] = Query(None)):
             "count": 1
         }
 
-    # All vessel trails
+    # All vessel trails - only return what's already in memory (active vessels)
+    # This prevents loading all trails from Valkey which would defeat the purpose
     trails = []
     for vessel_mmsi, trail in vessel_trails.items():
         if len(trail) >= 2:  # Need at least 2 points for a line
@@ -855,14 +933,23 @@ async def get_vessel_incidents(mmsi: str):
 async def stream_vessels():
     """Server-Sent Events stream of vessel updates."""
     async def event_generator():
-        last_sent = {}
+        # Track last sent timestamp per vessel (memory-efficient vs storing full vessel data)
+        last_sent_ts: Dict[str, str] = {}
         while True:
-            # Find vessels that have changed
+            # Find vessels that have changed (compare timestamps, not full objects)
             changed = []
             for mmsi, vessel in vessel_state.items():
-                if mmsi not in last_sent or last_sent[mmsi] != vessel:
+                vessel_ts = vessel.get('timestamp', '')
+                if mmsi not in last_sent_ts or last_sent_ts[mmsi] != vessel_ts:
                     changed.append(vessel)
-                    last_sent[mmsi] = vessel.copy()
+                    last_sent_ts[mmsi] = vessel_ts
+
+            # Cleanup old entries not in vessel_state anymore
+            if len(last_sent_ts) > len(vessel_state) * 1.5:
+                current_mmsis = set(vessel_state.keys())
+                stale_keys = [k for k in last_sent_ts if k not in current_mmsis]
+                for k in stale_keys:
+                    del last_sent_ts[k]
 
             if changed:
                 data = json.dumps({"vessels": changed})
@@ -883,11 +970,14 @@ async def stream_alerts():
     async def event_generator():
         last_count = 0
         while True:
-            if len(alerts_list) > last_count:
-                new_alerts = alerts_list[:len(alerts_list) - last_count]
+            current_count = len(alerts_list)
+            if current_count > last_count:
+                # Get new alerts (they're at the front of the deque)
+                new_count = current_count - last_count
+                new_alerts = list(alerts_list)[:new_count]  # Convert deque slice to list
                 data = json.dumps({"alerts": new_alerts})
                 yield f"data: {data}\n\n"
-                last_count = len(alerts_list)
+                last_count = current_count
 
             await asyncio.sleep(0.5)
 

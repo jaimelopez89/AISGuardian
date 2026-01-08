@@ -322,6 +322,11 @@ class ZoneCrossing:
     nav_status: Optional[int] = None
 
 
+# Memory limits for investigation
+MAX_POSITIONS_PER_VESSEL = 1000  # Limit stored positions per vessel
+MAX_VESSELS_TO_TRACK = 5000  # Maximum vessels to track in a single investigation
+
+
 @dataclass
 class VesselTrack:
     """Complete track for a vessel during the investigation period."""
@@ -335,6 +340,20 @@ class VesselTrack:
     zone_exits: List[ZoneCrossing] = field(default_factory=list)
     suspicious_indicators: List[str] = field(default_factory=list)
     positions_in_zone: List[dict] = field(default_factory=list)
+
+    def add_position(self, pos: dict) -> bool:
+        """Add position with memory limit. Returns False if limit reached."""
+        if len(self.positions) < MAX_POSITIONS_PER_VESSEL:
+            self.positions.append(pos)
+            return True
+        return False
+
+    def add_position_in_zone(self, pos: dict) -> bool:
+        """Add zone position with memory limit. Returns False if limit reached."""
+        if len(self.positions_in_zone) < MAX_POSITIONS_PER_VESSEL:
+            self.positions_in_zone.append(pos)
+            return True
+        return False
 
     @property
     def total_time_in_zone_minutes(self) -> float:
@@ -645,8 +664,22 @@ class VesselStateTracker:
             point = Point(lon, lat)  # Shapely uses (x, y) = (lon, lat)
             is_inside = self.prepared_polygon.contains(point)
 
-        # Initialize vessel track if needed
+        # Check for state change first (before creating track)
+        was_inside = self.vessel_states.get(mmsi, False)
+
+        # Only create track for vessels that enter the zone or are already tracked
+        # This prevents memory bloat from vessels that just pass nearby
         if mmsi not in self.vessel_tracks:
+            if not is_inside and not was_inside:
+                # Vessel is outside zone and wasn't inside before - don't track
+                return None
+
+            # Check vessel limit
+            if len(self.vessel_tracks) >= MAX_VESSELS_TO_TRACK:
+                # At limit - only track if vessel is entering zone
+                if not is_inside:
+                    return None
+
             flag = get_flag_from_mmsi(mmsi)
             self.vessel_tracks[mmsi] = VesselTrack(
                 mmsi=mmsi,
@@ -664,11 +697,9 @@ class VesselStateTracker:
         if pos.get('imo_number') and not track.imo_number:
             track.imo_number = pos.get('imo_number')
 
-        # Record all positions for this vessel
-        track.positions.append(pos)
+        # Record positions using memory-limited methods
+        track.add_position(pos)
 
-        # Check for state change
-        was_inside = self.vessel_states.get(mmsi, False)
         crossing = None
 
         try:
@@ -703,7 +734,7 @@ class VesselStateTracker:
             track.zone_exits.append(crossing)
 
         if is_inside:
-            track.positions_in_zone.append(pos)
+            track.add_position_in_zone(pos)
 
         self.vessel_states[mmsi] = is_inside
         return crossing
