@@ -196,7 +196,7 @@ export default function App() {
     error: vesselsError,
     stats: vesselStats,
   } = useVesselPositions({
-    pollInterval: 1000,
+    pollInterval: 5000,  // Reduced from 1s to 5s to lower egress costs
   })
 
   const {
@@ -206,12 +206,12 @@ export default function App() {
     error: alertsError,
     stats: alertStats,
   } = useAlerts({
-    pollInterval: 1000,
+    pollInterval: 3000,  // Reduced from 1s to 3s to lower egress costs
   })
 
   // Fetch vessel trails
   const { trails: rawTrails } = useTrails({
-    pollInterval: 5000,
+    pollInterval: 15000,  // Reduced from 5s to 15s - trails don't change fast
     enabled: showTrails && trailHorizonHours > 0,
   })
 

@@ -24,6 +24,7 @@ from confluent_kafka import Consumer, KafkaError, TopicPartition
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse
 import redis
 
@@ -76,6 +77,9 @@ def setup_ssl_certs():
 setup_ssl_certs()
 
 app = FastAPI(title="AIS Guardian API")
+
+# Enable GZip compression - reduces JSON payloads by 80-90%
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Enable CORS for frontend
 app.add_middleware(
