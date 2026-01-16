@@ -436,10 +436,76 @@ export default function Map({
     })
   }, [ports, showPorts, viewState.zoom])
 
-  // Alert layer - shows alert locations as pulsing markers
+  // Separate persistent Shadow Fleet alerts from regular alerts
+  const { persistentAlerts, regularAlerts } = useMemo(() => {
+    const persistent = []
+    const regular = []
+    for (const alert of alerts.slice(0, 100)) {
+      // Check if this is a confirmed Shadow Fleet alert (exact IMO/MMSI match)
+      if (alert.alert_type === 'SANCTIONS_MATCH' &&
+          alert.details?.persistent === true &&
+          alert.details?.exact_match === true) {
+        persistent.push(alert)
+      } else {
+        regular.push(alert)
+      }
+    }
+    return { persistentAlerts: persistent, regularAlerts: regular.slice(0, 50) }
+  }, [alerts])
+
+  // Persistent Shadow Fleet alert layer - follows vessel current position
+  const persistentAlertLayer = useMemo(() => {
+    if (persistentAlerts.length === 0) return null
+
+    // Map persistent alerts to current vessel positions
+    const vesselMap = new Map(vessels.map(v => [v.mmsi, v]))
+    const alertsWithCurrentPos = persistentAlerts.map(alert => {
+      const vessel = vesselMap.get(alert.mmsi)
+      if (vessel) {
+        return {
+          ...alert,
+          longitude: vessel.longitude,
+          latitude: vessel.latitude,
+          _currentVessel: vessel
+        }
+      }
+      return alert // Keep original position if vessel not found
+    })
+
+    return new ScatterplotLayer({
+      id: 'persistent-alerts',
+      data: alertsWithCurrentPos,
+      pickable: true,
+      opacity: 1.0,
+      stroked: true,
+      filled: true,
+      radiusScale: 1,
+      radiusMinPixels: 14,
+      radiusMaxPixels: 40,
+      lineWidthMinPixels: 3,
+      getPosition: d => [d.longitude, d.latitude],
+      getRadius: 300,
+      getFillColor: [220, 38, 38, 150], // Red with transparency
+      getLineColor: [220, 38, 38, 255], // Solid red border
+      onHover: info => {
+        if (info.object) {
+          setHoverInfo({ ...info, isAlert: true, isPersistent: true })
+        } else if (hoverInfo?.isAlert) {
+          setHoverInfo(null)
+        }
+      },
+      onClick: info => {
+        if (info.object && onAlertClick) {
+          onAlertClick(info.object)
+        }
+      },
+    })
+  }, [persistentAlerts, vessels, hoverInfo, onAlertClick])
+
+  // Alert layer - shows regular alert locations as pulsing markers
   const alertLayer = useMemo(() => new ScatterplotLayer({
     id: 'alerts',
-    data: alerts.slice(0, 50), // Show recent alerts
+    data: regularAlerts,
     pickable: true,
     opacity: 0.8,
     stroked: true,
@@ -465,7 +531,7 @@ export default function Map({
         onAlertClick(info.object)
       }
     },
-  }), [alerts, hoverInfo, onAlertClick])
+  }), [regularAlerts, hoverInfo, onAlertClick])
 
   // Vessel name labels for larger zoom levels
   const labelLayer = useMemo(() => {
@@ -474,13 +540,11 @@ export default function Map({
     // Filter to only vessels with names
     const labeledVessels = vessels.filter(v => v.ship_name)
 
-    // Create a fingerprint for updateTriggers to force re-render on filter changes
-    const dataFingerprint = labeledVessels.length > 0
-      ? `${labeledVessels.length}-${labeledVessels[0]?.mmsi}-${labeledVessels[labeledVessels.length - 1]?.mmsi}`
-      : 'empty'
+    if (labeledVessels.length === 0) return null
 
     return new TextLayer({
-      id: 'vessel-labels',
+      // Dynamic ID forces layer recreation when vessel set changes
+      id: `vessel-labels-${labeledVessels.length}`,
       data: labeledVessels,
       pickable: false,
       getPosition: d => [d.longitude, d.latitude],
@@ -493,13 +557,15 @@ export default function Map({
       getTextAnchor: 'start',
       getAlignmentBaseline: 'center',
       getPixelOffset: [14, 0],
-      fontFamily: 'Monaco, monospace',
+      fontFamily: 'Arial, sans-serif',
       fontWeight: 'bold',
       outlineWidth: 2,
       outlineColor: [15, 23, 42, 255],
+      // Force updates when data changes
       updateTriggers: {
-        getText: dataFingerprint,
-        getPosition: dataFingerprint,
+        getData: labeledVessels,
+        getText: labeledVessels,
+        getPosition: labeledVessels,
       },
     })
   }, [vessels, viewState.zoom])
@@ -511,8 +577,9 @@ export default function Map({
     portLabelLayer,
     trailsLayer,
     ...investigationLayers,  // Investigation track below alerts
-    alertLayer,      // Alert circles below vessels
-    vesselLayer,     // Vessel icons on top - get click priority
+    alertLayer,              // Regular alert circles
+    vesselLayer,             // Vessel icons
+    persistentAlertLayer,    // Shadow Fleet alerts - always on top of vessels
     labelLayer,
   ].filter(Boolean)
 

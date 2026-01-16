@@ -138,6 +138,29 @@ public class Alert implements Serializable {
         alert.addDetail("gap_minutes", gapMinutes);
         alert.addDetail("last_speed", lastState.getLastSpeed());
         alert.addDetail("last_seen", lastState.getLastSeen());
+        alert.addDetail("dark_type", "GONE_DARK");
+
+        return alert;
+    }
+
+    /**
+     * Create alert for vessel that appeared in open water (was operating with AIS off).
+     */
+    public static Alert darkEvent(AISPosition position, Severity severity,
+                                  String title, String description,
+                                  String darkType, double distanceFromShore) {
+        Alert alert = new Alert(AlertType.DARK_EVENT, severity, position.getMmsi());
+        alert.setVesselName(position.getShipName());
+        alert.setImoNumber(position.getImoNumber());
+        alert.setLatitude(position.getLatitude());
+        alert.setLongitude(position.getLongitude());
+        alert.setTitle(title);
+        alert.setDescription(description);
+        alert.addDetail("dark_type", darkType);
+        alert.addDetail("distance_from_shore_nm", distanceFromShore);
+        alert.addDetail("vessel_speed", position.getSpeedOverGround());
+        alert.addDetail("vessel_course", position.getCourseOverGround());
+        alert.addDetail("ship_type", position.getShipType());
 
         return alert;
     }

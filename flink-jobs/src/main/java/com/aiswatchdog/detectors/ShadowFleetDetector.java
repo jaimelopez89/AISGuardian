@@ -84,51 +84,48 @@ public class ShadowFleetDetector
 
         List<Alert> alerts = new ArrayList<>();
 
-        // Check 1: IMO number match
+        // Check 1: IMO number exact match (highest confidence)
         if (imoNumber != null && !imoNumber.isEmpty()) {
             SanctionedVessel sanctionedByImo = sanctionsState.get("IMO:" + imoNumber);
             if (sanctionedByImo != null && sanctionedByImo.isSanctionedVessel()) {
-                Alert alert = createSanctionedVesselAlert(position, sanctionedByImo);
+                Alert alert = createSanctionedVesselAlert(position, sanctionedByImo, "IMO_EXACT_MATCH");
                 alerts.add(alert);
-                LOG.warn("SHADOW FLEET VESSEL DETECTED: {} (IMO: {}) - {}",
+                LOG.warn("SHADOW FLEET VESSEL DETECTED (IMO match): {} (IMO: {}) - {}",
                         position.getShipName(), imoNumber, sanctionedByImo.getVesselName());
             }
         }
 
-        // Check 2: High-risk flag state based on MMSI MID code
-        if (mmsi != null && mmsi.length() >= 3) {
-            String mid = mmsi.substring(0, 3);
-            SanctionedVessel flagRisk = sanctionsState.get("FLAG:" + mid);
-            if (flagRisk != null && flagRisk.isHighRiskFlag()) {
-                // Only alert for critical/high risk flags, or if vessel is a tanker
-                String riskLevel = flagRisk.getRiskLevel();
-                boolean isTanker = position.isTanker();
+        // Check 2: MMSI exact match (for vessels in sanctions list by MMSI)
+        if (mmsi != null && !mmsi.isEmpty()) {
+            SanctionedVessel sanctionedByMmsi = sanctionsState.get("MMSI:" + mmsi);
+            if (sanctionedByMmsi != null && sanctionedByMmsi.isSanctionedVessel()) {
+                // Check if we already matched by IMO to avoid duplicates
+                boolean alreadyMatched = alerts.stream()
+                        .anyMatch(a -> a.getDetails() != null &&
+                                "IMO_EXACT_MATCH".equals(a.getDetails().get("match_type")));
 
-                if ("critical".equals(riskLevel) ||
-                    ("high".equals(riskLevel) && isTanker)) {
-                    Alert alert = createHighRiskFlagAlert(position, flagRisk);
+                if (!alreadyMatched) {
+                    Alert alert = createSanctionedVesselAlert(position, sanctionedByMmsi, "MMSI_EXACT_MATCH");
                     alerts.add(alert);
+                    LOG.warn("SHADOW FLEET VESSEL DETECTED (MMSI match): {} (MMSI: {}) - {}",
+                            position.getShipName(), mmsi, sanctionedByMmsi.getVesselName());
                 }
             }
         }
 
-        // Check 3: Name matching (fuzzy match against known shadow fleet names)
-        String shipName = position.getShipName();
-        if (shipName != null && !shipName.isEmpty()) {
-            for (Map.Entry<String, SanctionedVessel> entry : sanctionsState.immutableEntries()) {
-                SanctionedVessel vessel = entry.getValue();
-                if (vessel.isSanctionedVessel() && isNameMatch(shipName, vessel.getVesselName())) {
-                    // Check if we already matched by IMO
-                    boolean alreadyMatched = alerts.stream()
-                            .anyMatch(a -> a.getDetails() != null &&
-                                    vessel.getImoNumber().equals(a.getDetails().get("sanctioned_imo")));
+        // Check 3: High-risk flag state based on MMSI MID code (lower priority)
+        // Note: Name matching has been removed - only exact IMO/MMSI matches trigger shadow fleet alerts
+        if (mmsi != null && mmsi.length() >= 3 && alerts.isEmpty()) {
+            String mid = mmsi.substring(0, 3);
+            SanctionedVessel flagRisk = sanctionsState.get("FLAG:" + mid);
+            if (flagRisk != null && flagRisk.isHighRiskFlag()) {
+                // Only alert for critical risk flags with tankers
+                String riskLevel = flagRisk.getRiskLevel();
+                boolean isTanker = position.isTanker();
 
-                    if (!alreadyMatched) {
-                        Alert alert = createNameMatchAlert(position, vessel);
-                        alerts.add(alert);
-                        LOG.warn("SHADOW FLEET NAME MATCH: {} matches sanctioned {}",
-                                shipName, vessel.getVesselName());
-                    }
+                if ("critical".equals(riskLevel) && isTanker) {
+                    Alert alert = createHighRiskFlagAlert(position, flagRisk);
+                    alerts.add(alert);
                 }
             }
         }
@@ -152,9 +149,18 @@ public class ShadowFleetDetector
         BroadcastState<String, SanctionedVessel> state = ctx.getBroadcastState(SANCTIONS_STATE_DESCRIPTOR);
 
         if (vessel.isSanctionedVessel()) {
-            state.put("IMO:" + vessel.getImoNumber(), vessel);
-            LOG.info("Loaded sanctioned vessel: {} (IMO: {})",
-                    vessel.getVesselName(), vessel.getImoNumber());
+            // Store by IMO number for IMO matching
+            if (vessel.getImoNumber() != null && !vessel.getImoNumber().isEmpty()) {
+                state.put("IMO:" + vessel.getImoNumber(), vessel);
+                LOG.info("Loaded sanctioned vessel: {} (IMO: {})",
+                        vessel.getVesselName(), vessel.getImoNumber());
+            }
+            // Also store by MMSI for MMSI matching
+            if (vessel.getMmsi() != null && !vessel.getMmsi().isEmpty()) {
+                state.put("MMSI:" + vessel.getMmsi(), vessel);
+                LOG.info("Loaded sanctioned vessel: {} (MMSI: {})",
+                        vessel.getVesselName(), vessel.getMmsi());
+            }
         } else if (vessel.isHighRiskFlag()) {
             state.put("FLAG:" + vessel.getMidCode(), vessel);
             LOG.info("Loaded high-risk flag: {} ({})",
@@ -163,49 +169,12 @@ public class ShadowFleetDetector
     }
 
     /**
-     * Check if ship name matches a sanctioned vessel name (case-insensitive, partial match).
+     * Create alert for a vessel matched by IMO or MMSI number (exact match).
      */
-    private boolean isNameMatch(String actualName, String sanctionedName) {
-        if (actualName == null || sanctionedName == null) {
-            return false;
-        }
-
-        String actual = actualName.toUpperCase().trim();
-        String sanctioned = sanctionedName.toUpperCase().trim();
-
-        // Exact match
-        if (actual.equals(sanctioned)) {
-            return true;
-        }
-
-        // Contains match (for renamed vessels)
-        if (actual.contains(sanctioned) || sanctioned.contains(actual)) {
-            return actual.length() >= 4 && sanctioned.length() >= 4; // Avoid short false positives
-        }
-
-        // Remove common suffixes and try again
-        String[] suffixes = {" I", " II", " III", " 1", " 2", " 3", " ONE", " TWO"};
-        String actualClean = actual;
-        String sanctionedClean = sanctioned;
-
-        for (String suffix : suffixes) {
-            if (actualClean.endsWith(suffix)) {
-                actualClean = actualClean.substring(0, actualClean.length() - suffix.length());
-            }
-            if (sanctionedClean.endsWith(suffix)) {
-                sanctionedClean = sanctionedClean.substring(0, sanctionedClean.length() - suffix.length());
-            }
-        }
-
-        return actualClean.equals(sanctionedClean) && actualClean.length() >= 4;
-    }
-
-    /**
-     * Create alert for a vessel matched by IMO number.
-     */
-    private Alert createSanctionedVesselAlert(AISPosition position, SanctionedVessel sanctioned) {
+    private Alert createSanctionedVesselAlert(AISPosition position, SanctionedVessel sanctioned, String matchType) {
         Map<String, Object> details = new HashMap<>();
         details.put("sanctioned_imo", sanctioned.getImoNumber());
+        details.put("sanctioned_mmsi", sanctioned.getMmsi());
         details.put("sanctioned_name", sanctioned.getVesselName());
         details.put("sanctions_authorities", sanctioned.getSanctionsAuthorities());
         details.put("risk_level", sanctioned.getRiskLevel());
@@ -213,24 +182,29 @@ public class ShadowFleetDetector
         if (sanctioned.getNotes() != null && !sanctioned.getNotes().isEmpty()) {
             details.put("notes", sanctioned.getNotes());
         }
-        details.put("match_type", "IMO_NUMBER");
+        details.put("match_type", matchType);
+        // Mark as exact match so frontend knows to persist this alert
+        details.put("exact_match", true);
+        details.put("persistent", true);
 
-        Alert.Severity severity = "critical".equals(sanctioned.getRiskLevel()) ?
-                Alert.Severity.CRITICAL : Alert.Severity.HIGH;
+        // Exact matches are always CRITICAL severity
+        Alert.Severity severity = Alert.Severity.CRITICAL;
 
         String title = String.format("SHADOW FLEET: %s Detected",
                 position.getShipName() != null ? position.getShipName() : "Unknown Vessel");
 
         String authList = String.join(", ", sanctioned.getSanctionsAuthorities());
+        String matchInfo = matchType.contains("IMO") ?
+                "IMO: " + sanctioned.getImoNumber() :
+                "MMSI: " + sanctioned.getMmsi();
         String description = String.format(
-                "SANCTIONED VESSEL %s (MMSI: %s, IMO: %s) detected in Baltic Sea. " +
-                "This vessel is on the Russia shadow fleet list. Sanctioned by: %s. " +
-                "Risk level: %s.",
+                "CONFIRMED SANCTIONED VESSEL %s (MMSI: %s) detected in Baltic Sea. " +
+                "Exact %s match against sanctions database. Sanctioned by: %s. " +
+                "Risk level: CRITICAL.",
                 position.getShipName() != null ? position.getShipName() : sanctioned.getVesselName(),
                 position.getMmsi(),
-                sanctioned.getImoNumber(),
-                authList,
-                sanctioned.getRiskLevel().toUpperCase()
+                matchInfo,
+                authList
         );
 
         return Alert.sanctionsMatch(position, severity, title, description, details);
@@ -269,36 +243,6 @@ public class ShadowFleetDetector
                 flag.getCountryName(),
                 flag.getReason(),
                 flag.getRiskLevel().toUpperCase()
-        );
-
-        return Alert.sanctionsMatch(position, severity, title, description, details);
-    }
-
-    /**
-     * Create alert for a vessel matched by name.
-     */
-    private Alert createNameMatchAlert(AISPosition position, SanctionedVessel sanctioned) {
-        Map<String, Object> details = new HashMap<>();
-        details.put("sanctioned_imo", sanctioned.getImoNumber());
-        details.put("sanctioned_name", sanctioned.getVesselName());
-        details.put("actual_name", position.getShipName());
-        details.put("sanctions_authorities", sanctioned.getSanctionsAuthorities());
-        details.put("risk_level", sanctioned.getRiskLevel());
-        details.put("match_type", "NAME_MATCH");
-
-        // Name matches are less certain, use lower severity
-        Alert.Severity severity = Alert.Severity.MEDIUM;
-
-        String title = String.format("Possible Shadow Fleet: %s",
-                position.getShipName());
-
-        String description = String.format(
-                "Vessel %s (MMSI: %s) name matches sanctioned vessel %s (IMO: %s). " +
-                "This may be a renamed shadow fleet vessel. Verify IMO number to confirm.",
-                position.getShipName(),
-                position.getMmsi(),
-                sanctioned.getVesselName(),
-                sanctioned.getImoNumber()
         );
 
         return Alert.sanctionsMatch(position, severity, title, description, details);

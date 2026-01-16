@@ -17,6 +17,9 @@ public class SanctionedVessel implements Serializable {
     @JsonProperty("imo_number")
     private String imoNumber;
 
+    @JsonProperty("mmsi")
+    private String mmsi;
+
     @JsonProperty("vessel_name")
     private String vesselName;
 
@@ -55,6 +58,9 @@ public class SanctionedVessel implements Serializable {
 
     public String getImoNumber() { return imoNumber; }
     public void setImoNumber(String imoNumber) { this.imoNumber = imoNumber; }
+
+    public String getMmsi() { return mmsi; }
+    public void setMmsi(String mmsi) { this.mmsi = mmsi; }
 
     public String getVesselName() { return vesselName; }
     public void setVesselName(String vesselName) { this.vesselName = vesselName; }

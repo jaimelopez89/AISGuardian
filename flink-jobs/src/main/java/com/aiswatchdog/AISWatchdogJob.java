@@ -98,17 +98,23 @@ public class AISWatchdogJob {
             getConfig("KAFKA_GROUP_ID", "ais-watchdog-flink"));
 
         // Detection thresholds (configurable via args or env vars)
+        // Gone Dark: 30 min for commercial vessels (was 10 min which missed long gaps)
         long darkThresholdMinutes = params.getLong("dark-threshold-minutes",
-            Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "10")));
+            Long.parseLong(getConfig("DARK_THRESHOLD_MINUTES", "30")));
+        // Rendezvous: 1500m for 3 min (more sensitive - was 1000m/5min)
         double rendezvousDistanceMeters = params.getDouble("rendezvous-distance-meters",
-            Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "1000")));
+            Double.parseDouble(getConfig("RENDEZVOUS_DISTANCE_METERS", "1500")));
         long rendezvousDurationMinutes = params.getLong("rendezvous-duration-minutes",
-            Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "5")));
+            Long.parseLong(getConfig("RENDEZVOUS_DURATION_MINUTES", "3")));
+        // Rendezvous: Reduced port distance to 30nm (was 50nm)
+        double rendezvousPortDistanceNm = params.getDouble("rendezvous-port-distance-nm",
+            Double.parseDouble(getConfig("RENDEZVOUS_PORT_DISTANCE_NM", "30")));
 
         LOG.info("Starting AIS Watchdog Flink Job");
         LOG.info("Kafka Bootstrap Servers: {}", kafkaBootstrapServers);
         LOG.info("Dark event threshold: {} minutes", darkThresholdMinutes);
-        LOG.info("Rendezvous detection: {}m for {} minutes", rendezvousDistanceMeters, rendezvousDurationMinutes);
+        LOG.info("Rendezvous detection: {}m for {} minutes, {}nm from port",
+            rendezvousDistanceMeters, rendezvousDurationMinutes, rendezvousPortDistanceNm);
 
         // Set up execution environment
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -225,13 +231,14 @@ public class AISWatchdogJob {
         // ========== DETECTOR 3: Rendezvous Detection ==========
         // For rendezvous, we need to compare positions across vessels
         // Use a grid-based approach with keyed state
+        // More sensitive: 1500m for 3 min, 30nm from port (catches more STS transfers)
         SingleOutputStreamOperator<Alert> rendezvousAlerts = aisPositions
                 .keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude()))
                 .connect(aisPositions.keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude())))
                 .process(new RendezvousDetector(
                         rendezvousDistanceMeters,
                         rendezvousDurationMinutes,
-                        50  // min port distance NM
+                        rendezvousPortDistanceNm
                 ))
                 .name("Rendezvous Detector");
 
@@ -274,11 +281,12 @@ public class AISWatchdogJob {
 
         // ========== DETECTOR 8: Convoy Detection ==========
         // Detects groups of vessels traveling together in coordinated fashion
-        // Parameters: 2 NM proximity, 3 kts speed tolerance, 20° course tolerance, 3 min vessels, 5 min duration
+        // More sensitive: 3 NM proximity, 5 kts speed tolerance, 30° course tolerance, 2 vessels, 3 min duration
+        // (was: 2 NM, 3 kts, 20°, 3 vessels, 5 min - too restrictive)
         SingleOutputStreamOperator<Alert> convoyAlerts = aisPositions
                 .keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude()))
                 .connect(aisPositions.keyBy(pos -> getGridCell(pos.getLatitude(), pos.getLongitude())))
-                .process(new ConvoyDetector(2.0, 3.0, 20.0, 3, 5))
+                .process(new ConvoyDetector(3.0, 5.0, 30.0, 2, 3))
                 .name("Convoy Detector");
 
         // ========== DETECTOR 9: Anchor Dragging Detection ==========
