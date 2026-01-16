@@ -13,15 +13,21 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Ghost,
+  Users,
+  Navigation,
 } from 'lucide-react'
 
 // Available alert types for filtering
 const ALERT_TYPES = [
   { value: 'CABLE_PROXIMITY', label: 'Cable Proximity', icon: Cable, color: 'text-yellow-400' },
   { value: 'ANCHOR_DRAGGING', label: 'Anchor Dragging', icon: Anchor, color: 'text-red-500' },
+  { value: 'TRAJECTORY_PREDICTION', label: 'Trajectory Prediction', icon: Navigation, color: 'text-cyan-400' },
   { value: 'GEOFENCE_VIOLATION', label: 'Geofence', icon: MapPin, color: 'text-purple-400' },
-  { value: 'DARK_EVENT', label: 'Gone Dark', icon: Radio, color: 'text-red-400' },
+  { value: 'DARK_EVENT', label: 'Dark AIS', icon: Radio, color: 'text-red-400' },
+  { value: 'AIS_SPOOFING', label: 'AIS Spoofing', icon: Ghost, color: 'text-pink-400' },
   { value: 'RENDEZVOUS', label: 'Rendezvous', icon: Ship, color: 'text-blue-400' },
+  { value: 'CONVOY', label: 'Convoy', icon: Users, color: 'text-indigo-400' },
   { value: 'FISHING_IN_MPA', label: 'Illegal Fishing', icon: Fish, color: 'text-green-400' },
   { value: 'LOITERING', label: 'Loitering', icon: Timer, color: 'text-orange-400' },
   { value: 'SANCTIONS_MATCH', label: 'Sanctions', icon: AlertTriangle, color: 'text-red-500' },
@@ -429,9 +435,12 @@ function getAlertIcon(alertType) {
   const icons = {
     CABLE_PROXIMITY: Cable,
     ANCHOR_DRAGGING: Anchor,
+    TRAJECTORY_PREDICTION: Navigation,
     GEOFENCE_VIOLATION: MapPin,
     DARK_EVENT: Radio,
+    AIS_SPOOFING: Ghost,
     RENDEZVOUS: Ship,
+    CONVOY: Users,
     FISHING_IN_MPA: Fish,
     LOITERING: Timer,
     SANCTIONS_MATCH: AlertTriangle,
