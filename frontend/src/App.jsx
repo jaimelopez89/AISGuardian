@@ -216,7 +216,7 @@ export default function App() {
   })
 
   // Filter trails based on time horizon
-  const trails = useMemo(() => {
+  const timeFilteredTrails = useMemo(() => {
     if (trailHorizonHours === 0 || !rawTrails || rawTrails.length === 0) {
       return []
     }
@@ -268,6 +268,16 @@ export default function App() {
       }
     }).filter(Boolean) // Remove null entries
   }, [rawTrails, trailHorizonHours])
+
+  // Filter trails to only show vessels with alerts when showOnlyAlerts is enabled
+  const trails = useMemo(() => {
+    if (!showOnlyAlerts) {
+      return timeFilteredTrails
+    }
+    // Only show trails for vessels that have alerts
+    const alertMmsis = new Set(alerts.map(a => a.mmsi))
+    return timeFilteredTrails.filter(trail => alertMmsis.has(trail.mmsi))
+  }, [timeFilteredTrails, showOnlyAlerts, alerts])
 
   const isConnected = vesselsConnected || alertsConnected
   const messagesPerSecond = vesselStats.messagesPerSecond + alertStats.messagesPerSecond

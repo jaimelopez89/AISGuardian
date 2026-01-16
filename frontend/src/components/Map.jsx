@@ -471,14 +471,19 @@ export default function Map({
   const labelLayer = useMemo(() => {
     if (viewState.zoom < 8) return null
 
+    // Create a simple data fingerprint for updateTriggers
+    const dataFingerprint = vessels.length > 0
+      ? `${vessels.length}-${vessels[0]?.mmsi}-${vessels[vessels.length - 1]?.mmsi}`
+      : 'empty'
+
     return new TextLayer({
       id: 'vessel-labels',
-      data: vessels.filter(v => v.ship_name),
+      data: vessels,
       pickable: false,
       getPosition: d => [d.longitude, d.latitude],
       getText: d => {
         const flagState = getFlagState(d.mmsi)
-        return `${flagState.flag} ${d.ship_name}`
+        return `${flagState.flag} ${d.ship_name || 'Unknown'}`
       },
       getSize: 12,
       getColor: [255, 255, 255, 255],
@@ -489,6 +494,10 @@ export default function Map({
       fontWeight: 'bold',
       outlineWidth: 2,
       outlineColor: [15, 23, 42, 255],
+      updateTriggers: {
+        getText: dataFingerprint,
+        getPosition: dataFingerprint,
+      },
     })
   }, [vessels, viewState.zoom])
 
