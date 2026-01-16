@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import Map from './components/Map'
+import ErrorBoundary from './components/ErrorBoundary'
 import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
@@ -414,22 +415,24 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Map */}
         <div className="flex-1 relative">
-          <Map
-            vessels={displayVessels}
-            alerts={displayAlerts}
-            trails={trails}
-            ports={BALTIC_PORTS}
-            cables={displayCables}
-            selectedVessel={selectedVessel}
-            onVesselClick={handleVesselClick}
-            onAlertClick={handleAlertClick}
-            mapboxToken={MAPBOX_TOKEN}
-            showTrails={showTrails}
-            showPorts={showPorts}
-            showCables={showCables}
-            flyTo={flyTo}
-            investigationTrack={showInvestigationTrack ? investigationTrack : null}
-          />
+          <ErrorBoundary>
+            <Map
+              vessels={displayVessels}
+              alerts={displayAlerts}
+              trails={trails}
+              ports={BALTIC_PORTS}
+              cables={displayCables}
+              selectedVessel={selectedVessel}
+              onVesselClick={handleVesselClick}
+              onAlertClick={handleAlertClick}
+              mapboxToken={MAPBOX_TOKEN}
+              showTrails={showTrails}
+              showPorts={showPorts}
+              showCables={showCables}
+              flyTo={flyTo}
+              investigationTrack={showInvestigationTrack ? investigationTrack : null}
+            />
+          </ErrorBoundary>
 
           {/* Selected Vessel Card - top left, max height to avoid overlap */}
           {selectedVessel && (
