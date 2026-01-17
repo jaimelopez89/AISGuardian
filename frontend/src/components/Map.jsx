@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import MapGL, { NavigationControl, ScaleControl } from 'react-map-gl'
 import DeckGL from '@deck.gl/react'
 import { ScatterplotLayer, PolygonLayer, TextLayer, PathLayer, IconLayer } from '@deck.gl/layers'
@@ -57,38 +57,6 @@ export default function Map({
 }) {
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE)
   const [hoverInfo, setHoverInfo] = useState(null)
-  const [mapKey, setMapKey] = useState(0)  // Key to force remount on WebGL context loss
-  const containerRef = useRef(null)
-
-  // Monitor for WebGL context loss and recover by remounting
-  useEffect(() => {
-    const handleContextLost = (event) => {
-      console.warn('WebGL context lost, will attempt recovery...')
-      event.preventDefault()  // Allow context restoration
-    }
-
-    const handleContextRestored = () => {
-      console.log('WebGL context restored, remounting map...')
-      setMapKey(k => k + 1)  // Force remount
-    }
-
-    // Find canvas elements and add listeners
-    const container = containerRef.current
-    if (container) {
-      const canvases = container.querySelectorAll('canvas')
-      canvases.forEach(canvas => {
-        canvas.addEventListener('webglcontextlost', handleContextLost)
-        canvas.addEventListener('webglcontextrestored', handleContextRestored)
-      })
-
-      return () => {
-        canvases.forEach(canvas => {
-          canvas.removeEventListener('webglcontextlost', handleContextLost)
-          canvas.removeEventListener('webglcontextrestored', handleContextRestored)
-        })
-      }
-    }
-  }, [mapKey])
 
   // Handle flyTo prop changes - animate to new location
   useEffect(() => {
@@ -795,20 +763,12 @@ export default function Map({
   }
 
   return (
-    <div className="relative w-full h-full" ref={containerRef}>
+    <div className="relative w-full h-full">
       <DeckGL
-        key={mapKey}
         viewState={viewState}
         onViewStateChange={({ viewState }) => setViewState(viewState)}
         controller={true}
         layers={layers}
-        onError={(error) => {
-          console.error('DeckGL error:', error)
-          // Force remount on critical errors
-          if (error.message?.includes('WebGL') || error.message?.includes('context')) {
-            setMapKey(k => k + 1)
-          }
-        }}
         onHover={(info) => {
           // Clear tooltip when hovering over empty space (no object picked)
           if (!info.object && hoverInfo) {
