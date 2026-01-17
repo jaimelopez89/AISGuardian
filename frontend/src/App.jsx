@@ -1,6 +1,8 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
-import Map from './components/Map'
+import React, { useState, useCallback, useMemo, useEffect, lazy, Suspense } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
+
+// Lazy load Map to ensure React is fully initialized before deck.gl loads
+const Map = lazy(() => import('./components/Map'))
 import AlertFeed, { AlertStats } from './components/AlertFeed'
 import VesselCard, { VesselListItem } from './components/VesselCard'
 import Header from './components/Header'
@@ -416,22 +418,28 @@ export default function App() {
         {/* Map */}
         <div className="flex-1 relative">
           <ErrorBoundary>
-            <Map
-              vessels={displayVessels}
-              alerts={displayAlerts}
-              trails={trails}
-              ports={BALTIC_PORTS}
-              cables={displayCables}
-              selectedVessel={selectedVessel}
-              onVesselClick={handleVesselClick}
-              onAlertClick={handleAlertClick}
-              mapboxToken={MAPBOX_TOKEN}
-              showTrails={showTrails}
-              showPorts={showPorts}
-              showCables={showCables}
-              flyTo={flyTo}
-              investigationTrack={showInvestigationTrack ? investigationTrack : null}
-            />
+            <Suspense fallback={
+              <div className="h-full flex items-center justify-center bg-maritime-950">
+                <div className="text-maritime-400">Loading map...</div>
+              </div>
+            }>
+              <Map
+                vessels={displayVessels}
+                alerts={displayAlerts}
+                trails={trails}
+                ports={BALTIC_PORTS}
+                cables={displayCables}
+                selectedVessel={selectedVessel}
+                onVesselClick={handleVesselClick}
+                onAlertClick={handleAlertClick}
+                mapboxToken={MAPBOX_TOKEN}
+                showTrails={showTrails}
+                showPorts={showPorts}
+                showCables={showCables}
+                flyTo={flyTo}
+                investigationTrack={showInvestigationTrack ? investigationTrack : null}
+              />
+            </Suspense>
           </ErrorBoundary>
 
           {/* Selected Vessel Card - top left, max height to avoid overlap */}
