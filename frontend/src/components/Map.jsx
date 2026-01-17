@@ -41,11 +41,19 @@ export default function Map({
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
+  const onVesselClickRef = useRef(onVesselClick)
+  const onAlertClickRef = useRef(onAlertClick)
+  const [mapLoaded, setMapLoaded] = useState(false)
   const [hoverInfo, setHoverInfo] = useState(null)
 
-  // Initialize map once
+  // Keep callback refs updated
+  useEffect(() => { onVesselClickRef.current = onVesselClick }, [onVesselClick])
+  useEffect(() => { onAlertClickRef.current = onAlertClick }, [onAlertClick])
+
+  // Initialize map once - NO callback dependencies to prevent reload
   useEffect(() => {
-    if (!containerRef.current || !mapboxToken || mapRef.current) return
+    if (!containerRef.current || !mapboxToken) return
+    if (mapRef.current) return // Already initialized
 
     mapboxgl.accessToken = mapboxToken
     const map = new mapboxgl.Map({
@@ -127,16 +135,16 @@ export default function Map({
         },
       })
 
-      // Vessels - circles
+      // Vessels - circles (use numeric 1/0 for selected/flagged since GeoJSON stringifies booleans)
       map.addLayer({
         id: 'vessels-circle',
         type: 'circle',
         source: 'vessels',
         paint: {
-          'circle-radius': ['case', ['get', 'selected'], 10, ['get', 'flagged'], 8, 6],
+          'circle-radius': ['case', ['==', ['get', 'selected'], 1], 10, ['==', ['get', 'flagged'], 1], 8, 6],
           'circle-color': ['get', 'color'],
-          'circle-stroke-width': ['case', ['get', 'selected'], 3, ['get', 'flagged'], 2, 1],
-          'circle-stroke-color': ['case', ['get', 'selected'], '#3b82f6', '#ffffff'],
+          'circle-stroke-width': ['case', ['==', ['get', 'selected'], 1], 3, ['==', ['get', 'flagged'], 1], 2, 1],
+          'circle-stroke-color': ['case', ['==', ['get', 'selected'], 1], '#3b82f6', '#ffffff'],
         },
       })
 
@@ -160,11 +168,11 @@ export default function Map({
         },
       })
 
-      // Click handlers
+      // Click handlers - use refs to get latest callbacks
       map.on('click', 'vessels-circle', (e) => {
-        if (e.features?.[0]?.properties && onVesselClick) {
+        if (e.features?.[0]?.properties && onVesselClickRef.current) {
           const props = e.features[0].properties
-          onVesselClick({
+          onVesselClickRef.current({
             mmsi: props.mmsi,
             ship_name: props.name,
             ship_type: props.shipType,
@@ -178,9 +186,9 @@ export default function Map({
       })
 
       map.on('click', 'alerts-circle', (e) => {
-        if (e.features?.[0]?.properties && onAlertClick) {
+        if (e.features?.[0]?.properties && onAlertClickRef.current) {
           const props = e.features[0].properties
-          onAlertClick({
+          onAlertClickRef.current({
             id: props.id,
             mmsi: props.mmsi,
             title: props.title,
@@ -244,13 +252,15 @@ export default function Map({
       })
 
       mapRef.current = map
+      setMapLoaded(true)
     })
 
     return () => {
       map.remove()
       mapRef.current = null
+      setMapLoaded(false)
     }
-  }, [mapboxToken, onVesselClick, onAlertClick])
+  }, [mapboxToken]) // Only mapboxToken - callbacks use refs
 
   // Update vessels data
   useEffect(() => {
@@ -272,8 +282,8 @@ export default function Map({
           heading: v.heading,
           flag: flagState.flag,
           flagName: flagState.name,
-          flagged: flagState.flagged,
-          selected: isSelected,
+          flagged: flagState.flagged ? 1 : 0,
+          selected: isSelected ? 1 : 0,
           color: flagState.flagged ? '#ef4444' : getVesselColor(v.ship_type),
         },
       }
@@ -390,7 +400,7 @@ function Tooltip({ info }) {
               <div className="font-bold text-white">{data.name}</div>
               <div className="text-slate-400 text-xs flex items-center gap-1">
                 {data.flagName}
-                {data.flagged === 'true' && <span className="px-1 bg-red-500/20 text-red-400 text-[10px] rounded">MONITORED</span>}
+                {data.flagged === 1 && <span className="px-1 bg-red-500/20 text-red-400 text-[10px] rounded">MONITORED</span>}
               </div>
             </div>
           </div>
