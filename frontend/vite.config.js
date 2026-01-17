@@ -24,6 +24,17 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    // Prevent chunk splitting issues that cause "Failed to fetch dynamically imported module"
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'mapbox': ['mapbox-gl', 'react-map-gl'],
+          'deckgl': ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/react', '@deck.gl/mapbox'],
+        }
+      }
+    }
+  },
   define: {
     'process.env': {}
   }
