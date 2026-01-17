@@ -23,6 +23,42 @@ function getAlertColor(severity) {
   return '#22c55e'
 }
 
+// Get ship icon name based on type and state
+function getShipIcon(shipType, flagged, selected) {
+  if (selected) return 'ship-selected'
+  if (flagged) return 'ship-flagged'
+  if (shipType >= 80 && shipType <= 89) return 'ship-tanker'
+  if (shipType >= 70 && shipType <= 79) return 'ship-cargo'
+  if (shipType >= 30 && shipType <= 37) return 'ship-fishing'
+  if (shipType >= 60 && shipType <= 69) return 'ship-passenger'
+  if (shipType >= 50 && shipType <= 59) return 'ship-special'
+  return 'ship-other'
+}
+
+// Create ship icon as canvas image for Mapbox
+function createShipIcon(color, size = 24) {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+
+  // Draw ship shape (pointed triangle facing up)
+  ctx.beginPath()
+  ctx.moveTo(size / 2, 2)           // Top point (bow)
+  ctx.lineTo(size - 3, size - 4)    // Bottom right
+  ctx.lineTo(size / 2, size - 8)    // Bottom center indent
+  ctx.lineTo(3, size - 4)           // Bottom left
+  ctx.closePath()
+
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  return canvas
+}
+
 export default function Map({
   vessels = [],
   alerts = [],
@@ -68,6 +104,21 @@ export default function Map({
     map.addControl(new mapboxgl.ScaleControl({ unit: 'nautical' }), 'bottom-right')
 
     map.on('load', () => {
+      // Add ship icons for each vessel type color
+      const shipColors = {
+        'ship-tanker': '#f97316',
+        'ship-cargo': '#8b5cf6',
+        'ship-fishing': '#22c55e',
+        'ship-passenger': '#3b82f6',
+        'ship-special': '#eab308',
+        'ship-other': '#6b7280',
+        'ship-flagged': '#ef4444',
+        'ship-selected': '#3b82f6',
+      }
+      Object.entries(shipColors).forEach(([name, color]) => {
+        map.addImage(name, createShipIcon(color, 28), { pixelRatio: 2 })
+      })
+
       // Add empty sources
       map.addSource('vessels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addSource('alerts', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -135,27 +186,29 @@ export default function Map({
         },
       })
 
-      // Vessels - circles (use numeric 1/0 for selected/flagged since GeoJSON stringifies booleans)
+      // Vessels - ship icons with rotation based on heading
       map.addLayer({
-        id: 'vessels-circle',
-        type: 'circle',
+        id: 'vessels-symbol',
+        type: 'symbol',
         source: 'vessels',
-        paint: {
-          'circle-radius': ['case', ['==', ['get', 'selected'], 1], 10, ['==', ['get', 'flagged'], 1], 8, 6],
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': ['case', ['==', ['get', 'selected'], 1], 3, ['==', ['get', 'flagged'], 1], 2, 1],
-          'circle-stroke-color': ['case', ['==', ['get', 'selected'], 1], '#3b82f6', '#ffffff'],
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-size': ['case', ['==', ['get', 'selected'], 1], 1.3, ['==', ['get', 'flagged'], 1], 1.1, 0.9],
+          'icon-rotate': ['get', 'heading'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
         },
       })
 
-      // Vessel labels at high zoom
+      // Vessel labels at high zoom (no emoji - causes glyph > 65535 error)
       map.addLayer({
         id: 'vessels-label',
         type: 'symbol',
         source: 'vessels',
         minzoom: 8,
         layout: {
-          'text-field': ['concat', ['get', 'flag'], ' ', ['get', 'name']],
+          'text-field': ['get', 'name'],
           'text-size': 11,
           'text-offset': [1.5, 0],
           'text-anchor': 'left',
@@ -169,7 +222,7 @@ export default function Map({
       })
 
       // Click handlers - use refs to get latest callbacks
-      map.on('click', 'vessels-circle', (e) => {
+      map.on('click', 'vessels-symbol', (e) => {
         if (e.features?.[0]?.properties && onVesselClickRef.current) {
           const props = e.features[0].properties
           onVesselClickRef.current({
@@ -201,7 +254,7 @@ export default function Map({
       })
 
       // Hover handlers
-      map.on('mouseenter', 'vessels-circle', (e) => {
+      map.on('mouseenter', 'vessels-symbol', (e) => {
         map.getCanvas().style.cursor = 'pointer'
         if (e.features?.[0]) {
           const props = e.features[0].properties
@@ -214,7 +267,7 @@ export default function Map({
         }
       })
 
-      map.on('mouseleave', 'vessels-circle', () => {
+      map.on('mouseleave', 'vessels-symbol', () => {
         map.getCanvas().style.cursor = ''
         setHoverInfo(null)
       })
@@ -270,6 +323,8 @@ export default function Map({
     const features = vessels.map(v => {
       const flagState = getFlagState(v.mmsi)
       const isSelected = selectedVessel?.mmsi === v.mmsi
+      // Use course if heading is unavailable (511 = not available per AIS spec)
+      const rotation = (v.heading && v.heading !== 511) ? v.heading : (v.course_over_ground || 0)
       return {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [v.longitude, v.latitude] },
@@ -279,11 +334,12 @@ export default function Map({
           shipType: v.ship_type,
           speed: v.speed_over_ground,
           course: v.course_over_ground,
-          heading: v.heading,
+          heading: rotation,
           flag: flagState.flag,
           flagName: flagState.name,
           flagged: flagState.flagged ? 1 : 0,
           selected: isSelected ? 1 : 0,
+          icon: getShipIcon(v.ship_type, flagState.flagged, isSelected),
           color: flagState.flagged ? '#ef4444' : getVesselColor(v.ship_type),
         },
       }
