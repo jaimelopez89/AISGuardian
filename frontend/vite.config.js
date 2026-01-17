@@ -25,12 +25,22 @@ export default defineConfig({
     }
   },
   build: {
-    // Prevent chunk splitting issues that cause "Failed to fetch dynamically imported module"
     rollupOptions: {
       output: {
-        manualChunks: {
-          'mapbox': ['mapbox-gl', 'react-map-gl'],
-          'deckgl': ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/react', '@deck.gl/mapbox'],
+        // Use function to ensure React is in a shared vendor chunk, not duplicated
+        manualChunks(id) {
+          // React must be in its own shared chunk to avoid duplication
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor-react'
+          }
+          // Mapbox libraries
+          if (id.includes('node_modules/mapbox-gl/') || id.includes('node_modules/react-map-gl/')) {
+            return 'mapbox'
+          }
+          // Deck.gl libraries
+          if (id.includes('node_modules/@deck.gl/')) {
+            return 'deckgl'
+          }
         }
       }
     }
