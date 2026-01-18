@@ -35,8 +35,8 @@ function getShipIcon(shipType, flagged, selected) {
   return 'ship-other'
 }
 
-// Create ship icon as canvas image for Mapbox
-function createShipIcon(color, size = 24) {
+// Create ship icon as ImageData for Mapbox
+function createShipIcon(color, size = 20) {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -44,19 +44,20 @@ function createShipIcon(color, size = 24) {
 
   // Draw ship shape (pointed triangle facing up)
   ctx.beginPath()
-  ctx.moveTo(size / 2, 2)           // Top point (bow)
-  ctx.lineTo(size - 3, size - 4)    // Bottom right
-  ctx.lineTo(size / 2, size - 8)    // Bottom center indent
-  ctx.lineTo(3, size - 4)           // Bottom left
+  ctx.moveTo(size / 2, 1)           // Top point (bow)
+  ctx.lineTo(size - 2, size - 3)    // Bottom right
+  ctx.lineTo(size / 2, size - 6)    // Bottom center indent
+  ctx.lineTo(2, size - 3)           // Bottom left
   ctx.closePath()
 
   ctx.fillStyle = color
   ctx.fill()
   ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 1
   ctx.stroke()
 
-  return canvas
+  const imageData = ctx.getImageData(0, 0, size, size)
+  return { width: size, height: size, data: imageData.data }
 }
 
 export default function Map({
@@ -116,7 +117,7 @@ export default function Map({
         'ship-selected': '#3b82f6',
       }
       Object.entries(shipColors).forEach(([name, color]) => {
-        map.addImage(name, createShipIcon(color, 28), { pixelRatio: 2 })
+        map.addImage(name, createShipIcon(color, 20))
       })
 
       // Add empty sources
