@@ -417,16 +417,16 @@ export default function App() {
         <div className="flex-1 relative">
           <ErrorBoundary>
             <Map
-              vessels={displayVessels}
+              vessels={showInvestigationTrack ? [] : displayVessels}
               alerts={showInvestigationTrack ? [] : displayAlerts}
-              trails={trails}
+              trails={showInvestigationTrack ? [] : trails}
               ports={BALTIC_PORTS}
               cables={displayCables}
-              selectedVessel={selectedVessel}
+              selectedVessel={showInvestigationTrack ? null : selectedVessel}
               onVesselClick={handleVesselClick}
               onAlertClick={handleAlertClick}
               mapboxToken={MAPBOX_TOKEN}
-              showTrails={showTrails}
+              showTrails={showTrails && !showInvestigationTrack}
               showPorts={showPorts}
               showCables={showCables}
               flyTo={flyTo}

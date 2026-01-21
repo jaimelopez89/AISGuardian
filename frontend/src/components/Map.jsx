@@ -474,7 +474,18 @@ export default function Map({
   // Update investigation track data (FITBURG)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded() || !investigationTrack) return
+    if (!map || !mapLoaded) return
+
+    const emptyCollection = { type: 'FeatureCollection', features: [] }
+    const trackSource = map.getSource('investigation-track')
+    const waypointsSource = map.getSource('investigation-waypoints')
+
+    // Clear data if no investigation track
+    if (!investigationTrack) {
+      if (trackSource) trackSource.setData(emptyCollection)
+      if (waypointsSource) waypointsSource.setData(emptyCollection)
+      return
+    }
 
     // Track line
     const trackFeature = {
@@ -486,17 +497,9 @@ export default function Map({
       properties: { name: investigationTrack.name },
     }
 
-    const trackSource = map.getSource('investigation-track')
     if (trackSource) trackSource.setData({ type: 'FeatureCollection', features: [trackFeature] })
 
-    // Waypoints
-    const getWaypointColor = (trackColor) => {
-      if (trackColor === 'green') return '#22c55e'
-      if (trackColor === 'yellow') return '#eab308'
-      if (trackColor === 'red') return '#ef4444'
-      return '#6b7280'
-    }
-
+    // Waypoints - all magenta now
     const waypointFeatures = investigationTrack.waypoints.map((wp, idx) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [wp.lon, wp.lat] },
@@ -506,13 +509,11 @@ export default function Map({
         speed: wp.speed,
         status: wp.status,
         hasAlert: wp.alert ? 1 : 0,
-        color: getWaypointColor(wp.trackColor),
       },
     }))
 
-    const waypointsSource = map.getSource('investigation-waypoints')
     if (waypointsSource) waypointsSource.setData({ type: 'FeatureCollection', features: waypointFeatures })
-  }, [investigationTrack])
+  }, [investigationTrack, mapLoaded])
 
   // Handle flyTo
   useEffect(() => {
