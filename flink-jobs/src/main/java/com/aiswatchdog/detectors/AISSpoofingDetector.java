@@ -41,6 +41,9 @@ public class AISSpoofingDetector extends KeyedProcessFunction<String, AISPositio
     // Maximum realistic speed for a vessel in knots (container ships ~25kts, fast ferries ~40kts)
     private static final double MAX_REALISTIC_SPEED_KNOTS = 50.0;
 
+    // AIS "speed not available" value (1023 raw = 102.3 knots) - treat as invalid, not spoofing
+    private static final double AIS_SPEED_NOT_AVAILABLE = 102.3;
+
     // Maximum speed a vessel can actually achieve between position reports (knots)
     // Used to detect teleportation
     private static final double TELEPORTATION_SPEED_THRESHOLD = 60.0;
@@ -322,6 +325,12 @@ public class AISSpoofingDetector extends KeyedProcessFunction<String, AISPositio
      */
     private Alert checkImpossibleSpeed(AISPosition position) {
         Double sog = position.getSpeedOverGround();
+
+        // Skip AIS "speed not available" value (102.3 knots = 1023 raw)
+        // This is not spoofing, just missing data
+        if (sog != null && Math.abs(sog - AIS_SPEED_NOT_AVAILABLE) < 0.1) {
+            return null;
+        }
 
         if (sog != null && sog > MAX_REALISTIC_SPEED_KNOTS) {
             Map<String, Object> details = new HashMap<>();

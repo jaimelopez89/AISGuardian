@@ -126,6 +126,8 @@ export default function Map({
       map.addSource('trails', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addSource('cables', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addSource('ports', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addSource('investigation-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addSource('investigation-waypoints', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
       // Cable zones - fill
       map.addLayer({
@@ -170,6 +172,50 @@ export default function Map({
           'line-color': ['get', 'color'],
           'line-width': 2,
           'line-opacity': 0.5,
+        },
+      })
+
+      // Investigation track line (FITBURG)
+      map.addLayer({
+        id: 'investigation-track-line',
+        type: 'line',
+        source: 'investigation-track',
+        paint: {
+          'line-color': '#ec4899',
+          'line-width': 3,
+          'line-opacity': 0.8,
+        },
+      })
+
+      // Investigation waypoints - circles with color based on status
+      map.addLayer({
+        id: 'investigation-waypoints-circle',
+        type: 'circle',
+        source: 'investigation-waypoints',
+        paint: {
+          'circle-radius': ['case', ['==', ['get', 'hasAlert'], 1], 10, 6],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': ['case', ['==', ['get', 'hasAlert'], 1], '#ef4444', '#ffffff'],
+        },
+      })
+
+      // Investigation waypoint labels
+      map.addLayer({
+        id: 'investigation-waypoints-label',
+        type: 'symbol',
+        source: 'investigation-waypoints',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 10,
+          'text-offset': [0, -1.5],
+          'text-anchor': 'bottom',
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        },
+        paint: {
+          'text-color': '#ec4899',
+          'text-halo-color': '#0f172a',
+          'text-halo-width': 1,
         },
       })
 
@@ -421,6 +467,49 @@ export default function Map({
     const source = map.getSource('ports')
     if (source) source.setData({ type: 'FeatureCollection', features })
   }, [ports, showPorts])
+
+  // Update investigation track data (FITBURG)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded() || !investigationTrack) return
+
+    // Track line
+    const trackFeature = {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: investigationTrack.coordinates,
+      },
+      properties: { name: investigationTrack.name },
+    }
+
+    const trackSource = map.getSource('investigation-track')
+    if (trackSource) trackSource.setData({ type: 'FeatureCollection', features: [trackFeature] })
+
+    // Waypoints
+    const getWaypointColor = (trackColor) => {
+      if (trackColor === 'green') return '#22c55e'
+      if (trackColor === 'yellow') return '#eab308'
+      if (trackColor === 'red') return '#ef4444'
+      return '#6b7280'
+    }
+
+    const waypointFeatures = investigationTrack.waypoints.map((wp, idx) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [wp.lon, wp.lat] },
+      properties: {
+        label: wp.location,
+        timestamp: wp.timestamp,
+        speed: wp.speed,
+        status: wp.status,
+        hasAlert: wp.alert ? 1 : 0,
+        color: getWaypointColor(wp.trackColor),
+      },
+    }))
+
+    const waypointsSource = map.getSource('investigation-waypoints')
+    if (waypointsSource) waypointsSource.setData({ type: 'FeatureCollection', features: waypointFeatures })
+  }, [investigationTrack])
 
   // Handle flyTo
   useEffect(() => {
