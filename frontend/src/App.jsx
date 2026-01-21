@@ -418,7 +418,7 @@ export default function App() {
           <ErrorBoundary>
             <Map
               vessels={displayVessels}
-              alerts={displayAlerts}
+              alerts={showInvestigationTrack ? [] : displayAlerts}
               trails={trails}
               ports={BALTIC_PORTS}
               cables={displayCables}
@@ -431,6 +431,7 @@ export default function App() {
               showCables={showCables}
               flyTo={flyTo}
               investigationTrack={showInvestigationTrack ? investigationTrack : null}
+              isLoading={!vesselsConnected && vessels.length === 0}
             />
           </ErrorBoundary>
 

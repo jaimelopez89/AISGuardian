@@ -75,6 +75,7 @@ export default function Map({
   showCables = true,
   flyTo = null,
   investigationTrack = null,
+  isLoading = false,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -187,35 +188,37 @@ export default function Map({
         },
       })
 
-      // Investigation waypoints - circles with color based on status
+      // Investigation waypoints - magenta circles
       map.addLayer({
         id: 'investigation-waypoints-circle',
         type: 'circle',
         source: 'investigation-waypoints',
         paint: {
-          'circle-radius': ['case', ['==', ['get', 'hasAlert'], 1], 10, 6],
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 2,
+          'circle-radius': ['case', ['==', ['get', 'hasAlert'], 1], 14, 10],
+          'circle-color': '#d946ef',  // Magenta/fuchsia
+          'circle-stroke-width': 3,
           'circle-stroke-color': ['case', ['==', ['get', 'hasAlert'], 1], '#ef4444', '#ffffff'],
+          'circle-opacity': 0.9,
         },
       })
 
-      // Investigation waypoint labels
+      // Investigation waypoint labels - bigger white text
       map.addLayer({
         id: 'investigation-waypoints-label',
         type: 'symbol',
         source: 'investigation-waypoints',
         layout: {
           'text-field': ['get', 'label'],
-          'text-size': 10,
-          'text-offset': [0, -1.5],
+          'text-size': 14,
+          'text-offset': [0, -2],
           'text-anchor': 'bottom',
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+          'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+          'text-max-width': 20,
         },
         paint: {
-          'text-color': '#ec4899',
+          'text-color': '#ffffff',
           'text-halo-color': '#0f172a',
-          'text-halo-width': 1,
+          'text-halo-width': 2,
         },
       })
 
@@ -525,6 +528,17 @@ export default function Map({
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <div className="text-xl font-semibold text-white mb-2">Loading Maritime Data</div>
+            <div className="text-slate-400 text-sm">Connecting to AIS stream...</div>
+          </div>
+        </div>
+      )}
 
       {hoverInfo && <Tooltip info={hoverInfo} />}
       <Legend />
