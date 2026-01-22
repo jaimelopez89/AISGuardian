@@ -2,7 +2,7 @@
 
 **Real-time Maritime Surveillance for Baltic Sea Infrastructure Protection**
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://aisguardian-production.up.railway.app)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://lopez.fi/aisguardian)
 [![Aiven Kafka](https://img.shields.io/badge/Aiven-Kafka-ff6600)](https://aiven.io)
 [![Apache Flink](https://img.shields.io/badge/Apache-Flink%201.18-e6526f)](https://flink.apache.org)
 [![Ververica Cloud](https://img.shields.io/badge/Ververica-Cloud-blue)](https://www.ververica.com)
@@ -35,27 +35,6 @@ Sometimes your career path only makes sense in retrospect.
 
 ## The Threat Landscape
 
-```
-    Finland ═══════════════════════════════════════════════════════ Russia
-       │                      Gulf of Finland                          │
-       │   C-Lion1 ════════════════════════════════════════════════════╣
-       │   (1,172 km fiber optic - SEVERED Nov 2024)                   │
-       │                                                                │
-       │   Balticconnector ═══════════════════════════════ Estonia     │
-       │   (gas pipeline - DAMAGED Oct 2023)                           │
-       │                                                                │
-       │   Estlink 1 & 2 ═════════════════════════════════╝            │
-       │   (power cables - Estlink 2 DAMAGED Dec 2024)                 │
-       │                                                                │
-    Sweden ═══════════════════════════════════════════════════ Lithuania
-       │        NordBalt (power)                                        │
-       │                                                                │
-       └════════════════════════════════════════════════════════ Poland
-                   SwePol (power)
-
-              AIS Guardian monitors these critical zones 24/7
-```
-
 The Baltic Sea carries:
 - **95% of Northern Europe's internet traffic** via submarine cables
 - **Critical energy supplies** through gas pipelines and power interconnectors
@@ -67,7 +46,7 @@ Russia's shadow fleet—over 130 sanctioned vessels operating with falsified doc
 
 ## Live Demo
 
-**[https://aisguardian-production.up.railway.app](https://aisguardian-production.up.railway.app)**
+**[https://lopez.fi/aisguardian](https://lopez.fi/aisguardian)**
 
 Watch real vessels moving across the Baltic Sea with live anomaly detection. The demo includes:
 - **Real-time vessel positions** with ship-shaped icons showing heading
@@ -229,7 +208,15 @@ cp .env.example .env
 1. Create Valkey service
 2. Note connection URI for `.env`
 
-### 3. Start Services
+### 3. Build the Flink JAR
+
+```bash
+cd flink-jobs
+mvn clean package -DskipTests
+# Creates: target/ais-watchdog-flink-1.0.0.jar (78 MB)
+```
+
+### 4. Start Services
 
 ```bash
 # One-command startup (all services)
@@ -244,7 +231,7 @@ cd frontend && npm install && npm run dev  # Dashboard (port 5173)
 java -jar flink-jobs/target/ais-watchdog-flink-1.0.0.jar
 ```
 
-### 4. Access
+### 5. Access
 
 | Service | URL |
 |---------|-----|
