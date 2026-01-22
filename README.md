@@ -11,23 +11,33 @@ Built for the [Aiven Free Kafka Competition](https://aiven.io/blog/free-tier-apa
 
 ---
 
-## The Problem
+## Why I Built This
 
-In November 2024, the **C-Lion1 submarine cable** connecting Finland and Germany was severed by anchor dragging, disrupting communications for millions. Just months earlier, the **Balticconnector gas pipeline** was damaged in a suspected act of sabotage. The Baltic Sea's critical infrastructure—carrying 95% of the world's internet traffic and vital energy supplies—remains vulnerable.
+On November 18, 2024, I woke up to news that shook me: the **C-Lion1 submarine cable**—a 1,172 km fiber optic line connecting Finland to Germany—had been severed. A Chinese vessel, the *Yi Peng 3*, had allegedly dragged its anchor across the seabed for over 100 nautical miles, cutting a critical communications artery for Northern Europe.
 
-**AIS Guardian** monitors 2,500+ vessels in real-time to detect threats before they cause damage.
+This wasn't an isolated incident. Just a year earlier, the **Balticconnector gas pipeline** had been damaged in nearly identical circumstances. The **Nord Stream pipelines** were sabotaged in 2022. And as I write this, the **Estlink 2 power cable** was just damaged in December 2024.
+
+The Baltic Sea has become a flashpoint—a theater where critical infrastructure lies vulnerable on the seabed while thousands of vessels pass overhead daily. Some of those vessels belong to Russia's "shadow fleet": aging tankers with obscured ownership, flying flags of convenience, operating with AIS transponders that mysteriously go dark at suspicious moments.
+
+I'm a Solutions Architect at **Ververica**, the company behind Apache Flink. When Aiven announced their free Kafka tier competition, I saw the perfect opportunity to build something meaningful: a system that could have detected the C-Lion1 threat *before* the cable was cut. Not a theoretical exercise, but a working prototype monitoring real vessels in real time.
+
+**AIS Guardian** is the result—a real-time maritime surveillance platform that ingests live AIS data from 2,500+ vessels, runs 12 parallel detection algorithms in Apache Flink, and provides early warning for threats to undersea infrastructure.
+
+---
+
+## The Threat Landscape
 
 ```
     Finland ═══════════════════════════════════════════════════════ Russia
        │                      Gulf of Finland                          │
        │   C-Lion1 ════════════════════════════════════════════════════╣
-       │   (1,172 km fiber optic - severed Nov 2024)                   │
+       │   (1,172 km fiber optic - SEVERED Nov 2024)                   │
        │                                                                │
        │   Balticconnector ═══════════════════════════════ Estonia     │
-       │   (gas pipeline - damaged Oct 2023)                           │
+       │   (gas pipeline - DAMAGED Oct 2023)                           │
        │                                                                │
        │   Estlink 1 & 2 ═════════════════════════════════╝            │
-       │   (power cables)                                               │
+       │   (power cables - Estlink 2 DAMAGED Dec 2024)                 │
        │                                                                │
     Sweden ═══════════════════════════════════════════════════ Lithuania
        │        NordBalt (power)                                        │
@@ -35,8 +45,15 @@ In November 2024, the **C-Lion1 submarine cable** connecting Finland and Germany
        └════════════════════════════════════════════════════════ Poland
                    SwePol (power)
 
-                    AIS Guardian monitors these zones 24/7
+              AIS Guardian monitors these critical zones 24/7
 ```
+
+The Baltic Sea carries:
+- **95% of Northern Europe's internet traffic** via submarine cables
+- **Critical energy supplies** through gas pipelines and power interconnectors
+- **2,500+ commercial vessels** at any given moment
+
+Russia's shadow fleet—over 130 sanctioned vessels operating with falsified documents, disabled transponders, and flags of convenience—poses a constant threat. These vessels regularly transit cable zones, sometimes with AIS conveniently "malfunctioning."
 
 ---
 
@@ -44,7 +61,11 @@ In November 2024, the **C-Lion1 submarine cable** connecting Finland and Germany
 
 **[https://aisguardian-production.up.railway.app](https://aisguardian-production.up.railway.app)**
 
-Watch real vessels moving across the Baltic Sea with live anomaly detection.
+Watch real vessels moving across the Baltic Sea with live anomaly detection. The demo includes:
+- **Real-time vessel positions** with ship-shaped icons showing heading
+- **Historical investigation mode** reconstructing the FITBURG incident
+- **Live alerts** for cable proximity, shadow fleet detection, and AIS anomalies
+- **Interactive filtering** by vessel type, speed, and flag state
 
 ---
 
@@ -72,8 +93,8 @@ Watch real vessels moving across the Baltic Sea with live anomaly detection.
 ┌─────────────────┐     │  • Kafka Consumer│     ┌──────────────────┐
 │  REACT FRONTEND │◀────│  • Incidents     │◀───▶│  AIVEN VALKEY    │
 │                 │     │  • SSE Streaming │     │  (Redis)         │
-│  • Mapbox GL    │     └──────────────────┘     │  Trail Storage   │
-│  • Deck.gl      │                              └──────────────────┘
+│  • Mapbox GL JS │     └──────────────────┘     │  Trail Storage   │
+│  • Ship icons   │                              └──────────────────┘
 │  • Real-time    │
 └─────────────────┘
 ```
@@ -287,7 +308,7 @@ AISguardian/
 │   └── src/
 │       ├── App.jsx               # Main application
 │       └── components/
-│           ├── Map.jsx           # Deck.gl/Mapbox visualization
+│           ├── Map.jsx           # Mapbox GL visualization
 │           ├── AlertFeed.jsx     # Real-time alert stream
 │           └── VesselCard.jsx    # Vessel details panel
 │
@@ -313,7 +334,7 @@ AISguardian/
 | **Cache** | Aiven Valkey (Redis) | Trail persistence, state storage |
 | **Backend** | FastAPI (Python) | REST API, incident correlation |
 | **Frontend** | React 18 + Vite | Interactive dashboard |
-| **Visualization** | Mapbox GL + Deck.gl | Real-time vessel display |
+| **Visualization** | Mapbox GL JS | Real-time vessel display with heading |
 | **Data Source** | AISStream.io | Live AIS position feeds |
 | **Geospatial** | JTS (Java) | Polygon operations, trajectory math |
 
@@ -382,12 +403,18 @@ MIT
 
 ---
 
+## About the Author
+
+I'm a Solutions Architect at [**Ververica**](https://ververica.com), the original creators of Apache Flink. Working with stream processing technology daily gave me the expertise to build AIS Guardian's real-time detection pipeline. This project showcases how Flink's stateful stream processing can solve real-world problems at scale.
+
+---
+
 ## Acknowledgments
 
-- [Aiven](https://aiven.io) for the free Kafka tier and competition
-- [AISStream.io](https://aisstream.io) for real-time AIS data
-- [Ververica](https://ververica.com) for managed Flink
-- Open-source sanctions data from Ukraine GUR, EU, and OFAC
+- [**Aiven**](https://aiven.io) for the free Kafka tier and hosting this competition
+- [**Ververica**](https://ververica.com) for managed Flink and being an incredible place to work
+- [**AISStream.io**](https://aisstream.io) for real-time AIS data access
+- Open-source sanctions data from Ukraine GUR, EU Council, and OFAC
 
 ---
 
