@@ -13,15 +13,23 @@ Built for the [Aiven Free Kafka Competition](https://aiven.io/blog/free-tier-apa
 
 ## Why I Built This
 
-On November 18, 2024, I woke up to news that shook me: the **C-Lion1 submarine cable**—a 1,172 km fiber optic line connecting Finland to Germany—had been severed. A Chinese vessel, the *Yi Peng 3*, had allegedly dragged its anchor across the seabed for over 100 nautical miles, cutting a critical communications artery for Northern Europe.
+I have a strange combination of experience that finally makes sense.
 
-This wasn't an isolated incident. Just a year earlier, the **Balticconnector gas pipeline** had been damaged in nearly identical circumstances. The **Nord Stream pipelines** were sabotaged in 2022. And as I write this, the **Estlink 2 power cable** was just damaged in December 2024.
+Almost a decade in the maritime and energy industries. Years working with open-source data infrastructure. Now Head of Marketing at [**Ververica**](https://ververica.com), the original creators of Apache Flink.
 
-The Baltic Sea has become a flashpoint—a theater where critical infrastructure lies vulnerable on the seabed while thousands of vessels pass overhead daily. Some of those vessels belong to Russia's "shadow fleet": aging tankers with obscured ownership, flying flags of convenience, operating with AIS transponders that mysteriously go dark at suspicious moments.
+Last Christmas, I watched the news as the *Eagle S* tanker "unintentionally" severed undersea cables in the Gulf of Finland. A year before that, the *Yi Peng 3* dragged its anchor for over 100 nautical miles across the C-Lion1 cable. The Balticconnector pipeline. Nord Stream. And now, almost Christmas again, I couldn't shake the thought: will we get another dragging anchor under the tree this year?
 
-I'm a Solutions Architect at **Ververica**, the company behind Apache Flink. When Aiven announced their free Kafka tier competition, I saw the perfect opportunity to build something meaningful: a system that could have detected the C-Lion1 threat *before* the cable was cut. Not a theoretical exercise, but a working prototype monitoring real vessels in real time.
+Suddenly, everything clicked.
 
-**AIS Guardian** is the result—a real-time maritime surveillance platform that ingests live AIS data from 2,500+ vessels, runs 12 parallel detection algorithms in Apache Flink, and provides early warning for threats to undersea infrastructure.
+- I know what suspicious vessel behavior looks like.
+- I know how to build streaming pipelines that handle high-volume data.
+- I know how powerful Flink is for stateful event processing.
+
+When Aiven announced their free Kafka tier competition, I saw the perfect opportunity. Not to solve national security (that's above my pay grade), but to build something that could make sense of what's moving in our waters.
+
+**AIS Guardian** is the result. A real-time monitoring system for the Baltic Sea that detects vessels anchoring over cable routes, loitering near critical infrastructure, going dark in sensitive zones, and making unusual maneuvers near undersea cables.
+
+Sometimes your career path only makes sense in retrospect.
 
 ---
 
@@ -405,7 +413,9 @@ MIT
 
 ## About the Author
 
-I'm a Solutions Architect at [**Ververica**](https://ververica.com), the original creators of Apache Flink. Working with stream processing technology daily gave me the expertise to build AIS Guardian's real-time detection pipeline. This project showcases how Flink's stateful stream processing can solve real-world problems at scale.
+I'm Jaime, Head of Marketing at [**Ververica**](https://ververica.com), the original creators of Apache Flink. Before that, I spent years in the maritime and energy sectors, which is probably why I get unreasonably annoyed when tankers drag their anchors across critical infrastructure.
+
+This project combines everything I've learned along the way: understanding vessel behavior, building data pipelines, and leveraging Flink's stateful stream processing for real-time detection. It's a hobby project born from frustration and curiosity.
 
 ---
 
