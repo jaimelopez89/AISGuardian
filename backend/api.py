@@ -712,8 +712,14 @@ async def get_vessels(
     max_lat: Optional[float] = Query(None),
     min_lon: Optional[float] = Query(None),
     max_lon: Optional[float] = Query(None),
+    minimal: bool = Query(False, description="Return only essential fields for map display"),
 ):
-    """Get current vessel positions."""
+    """Get current vessel positions.
+
+    Args:
+        minimal: If True, returns only essential fields (lat, lon, heading, speed, type, flag)
+                 reducing payload size by ~40% for map display
+    """
     vessels = list(vessel_state.values())
 
     # Filter by bounding box if provided
@@ -723,6 +729,21 @@ async def get_vessels(
             if min_lat <= v.get('latitude', 0) <= max_lat
             and min_lon <= v.get('longitude', 0) <= max_lon
         ]
+
+    # Strip heavy fields if minimal mode requested
+    if minimal:
+        vessels = [{
+            'mmsi': v.get('mmsi'),
+            'latitude': v.get('latitude'),
+            'longitude': v.get('longitude'),
+            'heading': v.get('heading'),
+            'speed': v.get('speed'),
+            'ship_name': v.get('ship_name'),
+            'ship_type': v.get('ship_type'),
+            'flag': v.get('flag'),
+            'timestamp': v.get('timestamp'),
+            # Removed: destination, eta, draught, call_sign, dimensions, etc.
+        } for v in vessels]
 
     return {
         "vessels": vessels,

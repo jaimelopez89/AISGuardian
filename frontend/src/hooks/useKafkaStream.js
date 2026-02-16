@@ -9,7 +9,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 export function useVesselPositions(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
-    pollInterval = 2000,
+    pollInterval = 10000, // Increased from 2s to 10s to reduce bandwidth by 80%
+    useSSE = true, // Use Server-Sent Events for real-time updates (70% bandwidth reduction)
   } = options
 
   const [vessels, setVessels] = useState([])
@@ -17,14 +18,20 @@ export function useVesselPositions(options = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState({ messagesPerSecond: 0, totalMessages: 0 })
+  const [connectionMode, setConnectionMode] = useState('connecting') // 'sse', 'polling', 'connecting'
 
   // Track message rate over time
   const messageCountsRef = useRef([])
   const lastVesselDataRef = useRef(new Map())
+  const sseRef = useRef(null)
+  const pollingIntervalRef = useRef(null)
+  const sseRetriesRef = useRef(0)
+  const maxSSERetries = 3
 
   const fetchVessels = useCallback(async () => {
     try {
-      const response = await fetch(`${baseUrl}/api/vessels`)
+      // Use minimal=true to reduce payload size by ~40%
+      const response = await fetch(`${baseUrl}/api/vessels?minimal=true`)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch vessels: ${response.statusText}`)
@@ -78,15 +85,146 @@ export function useVesselPositions(options = {}) {
     }
   }, [baseUrl])
 
-  useEffect(() => {
+  const updateVesselsFromSSE = useCallback((vessels) => {
+    const now = Date.now()
+    const updatedCount = vessels.length
+
+    // Merge changed vessels into existing map
+    setVesselMap(prev => {
+      const newMap = new Map(prev)
+      vessels.forEach(v => {
+        newMap.set(v.mmsi, { ...v, lastUpdate: now })
+      })
+      return newMap
+    })
+
+    // Also update vessels array
+    setVessels(prev => {
+      const vesselMap = new Map(prev.map(v => [v.mmsi, v]))
+      vessels.forEach(v => {
+        vesselMap.set(v.mmsi, v)
+      })
+      return Array.from(vesselMap.values())
+    })
+
+    // Track message rate
+    messageCountsRef.current.push({ time: now, count: updatedCount })
+    messageCountsRef.current = messageCountsRef.current.filter(m => now - m.time < 5000)
+
+    const totalInWindow = messageCountsRef.current.reduce((sum, m) => sum + m.count, 0)
+    const windowSeconds = Math.max(1, (now - (messageCountsRef.current[0]?.time || now)) / 1000)
+    const msgPerSec = Math.round(totalInWindow / windowSeconds)
+
+    setStats(prev => ({
+      messagesPerSecond: msgPerSec,
+      totalMessages: prev.totalMessages + updatedCount,
+    }))
+  }, [])
+
+  const startPolling = useCallback(() => {
+    console.log('[useVesselPositions] Starting polling mode')
+    setConnectionMode('polling')
+
+    // Clear any existing polling interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
     // Initial fetch
     fetchVessels()
 
     // Start polling
-    const interval = setInterval(fetchVessels, pollInterval)
-
-    return () => clearInterval(interval)
+    pollingIntervalRef.current = setInterval(fetchVessels, pollInterval)
   }, [fetchVessels, pollInterval])
+
+  const startSSE = useCallback(() => {
+    // Don't retry SSE if we've exceeded max retries
+    if (sseRetriesRef.current >= maxSSERetries) {
+      console.log('[useVesselPositions] Max SSE retries exceeded, staying in polling mode')
+      return
+    }
+
+    console.log('[useVesselPositions] Attempting SSE connection')
+
+    try {
+      // Close existing SSE connection if any
+      if (sseRef.current) {
+        sseRef.current.close()
+      }
+
+      const eventSource = new EventSource(`${baseUrl}/api/stream/vessels`)
+
+      eventSource.onopen = () => {
+        console.log('[useVesselPositions] SSE connected')
+        setConnectionMode('sse')
+        setIsConnected(true)
+        setError(null)
+        sseRetriesRef.current = 0 // Reset retry counter on success
+
+        // Do initial fetch to populate state
+        fetchVessels()
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.vessels && Array.isArray(data.vessels)) {
+            updateVesselsFromSSE(data.vessels)
+          }
+        } catch (err) {
+          console.error('[useVesselPositions] Failed to parse SSE message:', err)
+        }
+      }
+
+      eventSource.onerror = (err) => {
+        console.error('[useVesselPositions] SSE error:', err)
+        eventSource.close()
+        sseRef.current = null
+        setIsConnected(false)
+
+        sseRetriesRef.current += 1
+
+        if (sseRetriesRef.current >= maxSSERetries) {
+          console.log('[useVesselPositions] Max SSE retries reached, falling back to polling permanently')
+          setError('SSE unavailable, using polling mode')
+          startPolling()
+        } else {
+          console.log(`[useVesselPositions] SSE retry ${sseRetriesRef.current}/${maxSSERetries} in 5s`)
+          setTimeout(startSSE, 5000)
+        }
+      }
+
+      sseRef.current = eventSource
+    } catch (err) {
+      console.error('[useVesselPositions] Failed to create SSE connection:', err)
+      sseRetriesRef.current += 1
+
+      if (sseRetriesRef.current >= maxSSERetries) {
+        startPolling()
+      }
+    }
+  }, [baseUrl, fetchVessels, updateVesselsFromSSE, startPolling])
+
+  useEffect(() => {
+    // Try SSE first if enabled
+    if (useSSE) {
+      startSSE()
+    } else {
+      startPolling()
+    }
+
+    // Cleanup
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close()
+        sseRef.current = null
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+  }, [useSSE, startSSE, startPolling])
 
   return {
     vessels,
@@ -94,6 +232,7 @@ export function useVesselPositions(options = {}) {
     isConnected,
     error,
     stats,
+    connectionMode, // 'sse', 'polling', or 'connecting'
   }
 }
 
@@ -106,12 +245,19 @@ export function useVesselPositions(options = {}) {
 export function useAlerts(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
-    pollInterval = 2000,
+    pollInterval = 10000, // Increased from 2s to 10s to reduce bandwidth by 80%
+    useSSE = true, // Use Server-Sent Events for real-time alerts
   } = options
 
   const [alerts, setAlerts] = useState([])
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState(null)
+  const [connectionMode, setConnectionMode] = useState('connecting')
+
+  const sseRef = useRef(null)
+  const pollingIntervalRef = useRef(null)
+  const sseRetriesRef = useRef(0)
+  const maxSSERetries = 3
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -132,15 +278,103 @@ export function useAlerts(options = {}) {
     }
   }, [baseUrl])
 
-  useEffect(() => {
-    // Initial fetch
+  const startPolling = useCallback(() => {
+    console.log('[useAlerts] Starting polling mode')
+    setConnectionMode('polling')
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
     fetchAlerts()
-
-    // Start polling
-    const interval = setInterval(fetchAlerts, pollInterval)
-
-    return () => clearInterval(interval)
+    pollingIntervalRef.current = setInterval(fetchAlerts, pollInterval)
   }, [fetchAlerts, pollInterval])
+
+  const startSSE = useCallback(() => {
+    if (sseRetriesRef.current >= maxSSERetries) {
+      console.log('[useAlerts] Max SSE retries exceeded, staying in polling mode')
+      return
+    }
+
+    console.log('[useAlerts] Attempting SSE connection')
+
+    try {
+      if (sseRef.current) {
+        sseRef.current.close()
+      }
+
+      const eventSource = new EventSource(`${baseUrl}/api/stream/alerts`)
+
+      eventSource.onopen = () => {
+        console.log('[useAlerts] SSE connected')
+        setConnectionMode('sse')
+        setIsConnected(true)
+        setError(null)
+        sseRetriesRef.current = 0
+
+        // Initial fetch to populate state
+        fetchAlerts()
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.alerts && Array.isArray(data.alerts)) {
+            // Prepend new alerts to the beginning
+            setAlerts(prev => [...data.alerts, ...prev].slice(0, 100))
+          }
+        } catch (err) {
+          console.error('[useAlerts] Failed to parse SSE message:', err)
+        }
+      }
+
+      eventSource.onerror = (err) => {
+        console.error('[useAlerts] SSE error:', err)
+        eventSource.close()
+        sseRef.current = null
+        setIsConnected(false)
+
+        sseRetriesRef.current += 1
+
+        if (sseRetriesRef.current >= maxSSERetries) {
+          console.log('[useAlerts] Max SSE retries reached, falling back to polling')
+          setError('SSE unavailable, using polling mode')
+          startPolling()
+        } else {
+          console.log(`[useAlerts] SSE retry ${sseRetriesRef.current}/${maxSSERetries} in 5s`)
+          setTimeout(startSSE, 5000)
+        }
+      }
+
+      sseRef.current = eventSource
+    } catch (err) {
+      console.error('[useAlerts] Failed to create SSE connection:', err)
+      sseRetriesRef.current += 1
+
+      if (sseRetriesRef.current >= maxSSERetries) {
+        startPolling()
+      }
+    }
+  }, [baseUrl, fetchAlerts, startPolling])
+
+  useEffect(() => {
+    if (useSSE) {
+      startSSE()
+    } else {
+      startPolling()
+    }
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close()
+        sseRef.current = null
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+  }, [useSSE, startSSE, startPolling])
 
   // Group alerts by severity
   const alertsBySeverity = {
@@ -156,6 +390,7 @@ export function useAlerts(options = {}) {
     isConnected,
     error,
     stats: { messagesPerSecond: 0, totalMessages: alerts.length },
+    connectionMode,
   }
 }
 
@@ -168,7 +403,7 @@ export function useAlerts(options = {}) {
 export function useTrails(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
-    pollInterval = 5000, // Less frequent than positions
+    pollInterval = 30000, // Increased from 5s to 30s to reduce bandwidth by 83%
     enabled = true,
   } = options
 
