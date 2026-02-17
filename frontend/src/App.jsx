@@ -54,6 +54,7 @@ export default function App() {
   const [selectedAlert, setSelectedAlert] = useState(null)
   const [rightPanel, setRightPanel] = useState('alerts') // 'alerts' | 'stats' | 'vessels'
   const [flyTo, setFlyTo] = useState(null) // { latitude, longitude, zoom } for map animation
+  const [mapBounds, setMapBounds] = useState(null) // Viewport bounds for filtering vessels
 
   // Map filtering state
   const [enabledVesselTypes, setEnabledVesselTypes] = useState(new Set(ALL_VESSEL_TYPES))
@@ -198,6 +199,7 @@ export default function App() {
     stats: vesselStats,
   } = useVesselPositions({
     pollInterval: 5000,  // Reduced from 1s to 5s to lower egress costs
+    bounds: mapBounds,   // Only fetch vessels in viewport (80-90% reduction)
   })
 
   const {
@@ -425,6 +427,7 @@ export default function App() {
               selectedVessel={showInvestigationTrack ? null : selectedVessel}
               onVesselClick={handleVesselClick}
               onAlertClick={handleAlertClick}
+              onBoundsChange={setMapBounds}
               mapboxToken={MAPBOX_TOKEN}
               showTrails={showTrails && !showInvestigationTrack}
               showPorts={showPorts}

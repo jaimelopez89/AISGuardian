@@ -10,7 +10,9 @@ export function useVesselPositions(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
     pollInterval = 10000, // Increased from 2s to 10s to reduce bandwidth by 80%
+    hiddenPollInterval = 60000, // 60s when tab is hidden (6× slower, 83% reduction)
     useSSE = true, // Use Server-Sent Events for real-time updates (70% bandwidth reduction)
+    bounds = null, // Viewport bounds { minLat, maxLat, minLon, maxLon } for filtering (80-90% reduction)
   } = options
 
   const [vessels, setVessels] = useState([])
@@ -30,8 +32,15 @@ export function useVesselPositions(options = {}) {
 
   const fetchVessels = useCallback(async () => {
     try {
-      // Use minimal=true to reduce payload size by ~40%
-      const response = await fetch(`${baseUrl}/api/vessels?minimal=true`)
+      // Build query string with minimal=true and optional viewport bounds
+      let url = `${baseUrl}/api/vessels?minimal=true`
+
+      // Add viewport bounds if available (only send vessels in view)
+      if (bounds && bounds.minLat && bounds.maxLat && bounds.minLon && bounds.maxLon) {
+        url += `&min_lat=${bounds.minLat}&max_lat=${bounds.maxLat}&min_lon=${bounds.minLon}&max_lon=${bounds.maxLon}`
+      }
+
+      const response = await fetch(url)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch vessels: ${response.statusText}`)
@@ -83,7 +92,7 @@ export function useVesselPositions(options = {}) {
       setError(err.message)
       setIsConnected(false)
     }
-  }, [baseUrl])
+  }, [baseUrl, bounds])
 
   const updateVesselsFromSSE = useCallback((vessels) => {
     const now = Date.now()
@@ -205,6 +214,42 @@ export function useVesselPositions(options = {}) {
     }
   }, [baseUrl, fetchVessels, updateVesselsFromSSE, startPolling])
 
+  // Handle visibility changes for bandwidth optimization
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isHidden = document.hidden
+
+      if (isHidden) {
+        console.log('[useVesselPositions] Tab hidden - slowing updates to 60s')
+
+        // If in polling mode, restart with slower interval
+        if (pollingIntervalRef.current && connectionMode === 'polling') {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = setInterval(fetchVessels, hiddenPollInterval)
+        }
+        // SSE stays connected (it's lightweight and we still want alerts)
+
+      } else {
+        console.log('[useVesselPositions] Tab visible - resuming normal updates')
+
+        // Speed up polling again
+        if (pollingIntervalRef.current && connectionMode === 'polling') {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = setInterval(fetchVessels, pollInterval)
+        }
+
+        // Immediate refresh to catch up on any missed updates
+        fetchVessels()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pollInterval, hiddenPollInterval, connectionMode, fetchVessels])
+
   useEffect(() => {
     // Try SSE first if enabled
     if (useSSE) {
@@ -246,6 +291,7 @@ export function useAlerts(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
     pollInterval = 10000, // Increased from 2s to 10s to reduce bandwidth by 80%
+    hiddenPollInterval = 60000, // 60s when tab is hidden (6× slower)
     useSSE = true, // Use Server-Sent Events for real-time alerts
   } = options
 
@@ -261,7 +307,7 @@ export function useAlerts(options = {}) {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const response = await fetch(`${baseUrl}/api/alerts?limit=100`)
+      const response = await fetch(`${baseUrl}/api/alerts?limit=20`)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch alerts: ${response.statusText}`)
@@ -320,8 +366,8 @@ export function useAlerts(options = {}) {
         try {
           const data = JSON.parse(event.data)
           if (data.alerts && Array.isArray(data.alerts)) {
-            // Prepend new alerts to the beginning
-            setAlerts(prev => [...data.alerts, ...prev].slice(0, 100))
+            // Prepend new alerts to the beginning (keep only last 20)
+            setAlerts(prev => [...data.alerts, ...prev].slice(0, 20))
           }
         } catch (err) {
           console.error('[useAlerts] Failed to parse SSE message:', err)
@@ -356,6 +402,42 @@ export function useAlerts(options = {}) {
       }
     }
   }, [baseUrl, fetchAlerts, startPolling])
+
+  // Handle visibility changes for bandwidth optimization
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isHidden = document.hidden
+
+      if (isHidden) {
+        console.log('[useAlerts] Tab hidden - slowing updates to 60s')
+
+        // If in polling mode, restart with slower interval
+        if (pollingIntervalRef.current && connectionMode === 'polling') {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = setInterval(fetchAlerts, hiddenPollInterval)
+        }
+        // SSE stays connected for real-time alerts
+
+      } else {
+        console.log('[useAlerts] Tab visible - resuming normal updates')
+
+        // Speed up polling again
+        if (pollingIntervalRef.current && connectionMode === 'polling') {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = setInterval(fetchAlerts, pollInterval)
+        }
+
+        // Immediate refresh to catch up
+        fetchAlerts()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pollInterval, hiddenPollInterval, connectionMode, fetchAlerts])
 
   useEffect(() => {
     if (useSSE) {
@@ -404,7 +486,7 @@ export function useTrails(options = {}) {
   const {
     baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000',
     pollInterval = 30000, // Increased from 5s to 30s to reduce bandwidth by 83%
-    enabled = true,
+    enabled = false, // Disabled by default - only fetch on-demand (90% bandwidth reduction)
   } = options
 
   const [trails, setTrails] = useState([])

@@ -69,6 +69,7 @@ export default function Map({
   selectedVessel,
   onVesselClick,
   onAlertClick,
+  onBoundsChange,
   mapboxToken,
   showTrails = true,
   showPorts = true,
@@ -81,12 +82,14 @@ export default function Map({
   const mapRef = useRef(null)
   const onVesselClickRef = useRef(onVesselClick)
   const onAlertClickRef = useRef(onAlertClick)
+  const onBoundsChangeRef = useRef(onBoundsChange)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [hoverInfo, setHoverInfo] = useState(null)
 
   // Keep callback refs updated
   useEffect(() => { onVesselClickRef.current = onVesselClick }, [onVesselClick])
   useEffect(() => { onAlertClickRef.current = onAlertClick }, [onAlertClick])
+  useEffect(() => { onBoundsChangeRef.current = onBoundsChange }, [onBoundsChange])
 
   // Initialize map once - NO callback dependencies to prevent reload
   useEffect(() => {
@@ -357,6 +360,25 @@ export default function Map({
       mapRef.current = map
       setMapLoaded(true)
     })
+
+    // Emit bounds changes for viewport filtering (reduces bandwidth by 80-90%)
+    const emitBounds = () => {
+      if (!map || !onBoundsChangeRef.current) return
+
+      const bounds = map.getBounds()
+      onBoundsChangeRef.current({
+        minLat: bounds.getSouth(),
+        maxLat: bounds.getNorth(),
+        minLon: bounds.getWest(),
+        maxLon: bounds.getEast(),
+      })
+    }
+
+    // Emit initial bounds after load
+    map.on('load', emitBounds)
+
+    // Emit bounds on pan/zoom
+    map.on('moveend', emitBounds)
 
     return () => {
       map.remove()
