@@ -274,6 +274,20 @@ The live demo runs on Railway with automatic deployments from GitHub.
 
 ---
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[README.md](README.md)** | This file - project overview and quick start |
+| **[CHANGELOG.md](CHANGELOG.md)** | Version history and recent changes |
+| **[BANDWIDTH_OPTIMIZATIONS.md](BANDWIDTH_OPTIMIZATIONS.md)** | Deep dive on 97% bandwidth reduction (10 GB → 0.3 GB/day) |
+| **[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)** | Detailed architecture and design decisions |
+| **[QUICKSTART.md](QUICKSTART.md)** | Fast setup guide for local development |
+| **[SERVICE_MANAGEMENT.md](SERVICE_MANAGEMENT.md)** | Service control and monitoring |
+| **[INVESTIGATION-2025-12-31.md](INVESTIGATION-2025-12-31.md)** | FITBURG cable sabotage case study |
+
+---
+
 ## Project Structure
 
 ```
@@ -312,9 +326,15 @@ AISguardian/
 │   ├── sanctions/                # Sanctions lists
 │   └── shadow_fleet.json         # 130+ sanctioned vessels
 │
+├── docs/                         # Additional documentation
+│   ├── architecture.md           # System architecture
+│   ├── data-formats.md           # Data structure specs
+│   └── deployment.md             # Deployment guides
+│
 ├── .env.example                  # Environment template
 ├── start.sh                      # Service orchestration
-└── README.md
+├── CHANGELOG.md                  # Version history
+└── BANDWIDTH_OPTIMIZATIONS.md    # Performance optimization guide
 ```
 
 ---
